@@ -14,6 +14,9 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
 
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body, html { width: 100%; height: 100%; font-family: 'Poppins', sans-serif; background: #f0f2f5; }
@@ -24,17 +27,17 @@
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
         }
         #map {
-            height: calc(100vh - 200px); width: 100%; border-radius: 10px;
+            height: calc(100vh - 250px); width: 100%; border-radius: 10px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); margin-top: 10px;
         }
         #searchContainer {
             position: relative; text-align: center; margin: 15px auto; width: 90%; max-width: 700px;
-            z-index: 1000; display: flex; justify-content: center; gap: 10px;
+            z-index: 1000; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;
         }
         #searchBox, #assetType, #connectedSubstation {
             padding: 12px; border: none; border-radius: 25px;
             font-size: 1rem; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            background: rgba(255, 255, 255, 0.9); cursor: pointer;
+            background: rgba(255, 255, 255, 0.9); cursor: pointer; min-width: 200px;
         }
         #searchBox:focus, #assetType:focus, #connectedSubstation:focus { 
             outline: none; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); 
@@ -51,16 +54,16 @@
         .search-item:last-child { border-bottom: none; }
         .search-item:hover { background: #e9ecef; }
         #buttonContainer {
-            text-align: center; margin: 10px auto; padding: 10px;
-            height: 60px;
+            text-align: center; margin: 20px auto; padding: 10px;
+            height: auto; display: flex; justify-content: center; flex-wrap: wrap; gap: 15px;
         }
-        #locateButton, #toggleMapButton, #addAssetButton, #reportButton {
-            padding: 10px 20px; background: linear-gradient(90deg, #28a745, #34c759);
+        #locateButton, #toggleMapButton, #addAssetButton, #reportButton, #cancelButton {
+            padding: 12px 25px; background: linear-gradient(90deg, #28a745, #34c759);
             color: white; border: none; border-radius: 25px; cursor: pointer;
             font-size: 1rem; font-weight: 600; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            transition: all 0.3s ease; margin: 0 10px; display: inline-block;
+            transition: all 0.3s ease;
         }
-        #locateButton:hover, #toggleMapButton:hover, #addAssetButton:hover, #reportButton:hover {
+        #locateButton:hover, #toggleMapButton:hover, #addAssetButton:hover, #reportButton:hover, #cancelButton:hover {
             transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
         }
         .blinking-substation {
@@ -75,15 +78,14 @@
             h2 { font-size: 1.2rem; padding: 10px; }
             #searchContainer { width: 85%; flex-direction: column; gap: 5px; }
             #searchBox, #assetType, #connectedSubstation { 
-                width: 100%; font-size: 0.9rem; padding: 10px; 
+                width: 100%; font-size: 0.9rem; padding: 10px; min-width: unset;
             }
             #searchResults { width: 100%; margin-top: 70px; }
-            #locateButton, #toggleMapButton, #addAssetButton, #reportButton { 
-                font-size: 0.85rem; padding: 8px 15px; margin: 0 5px; 
+            #locateButton, #toggleMapButton, #addAssetButton, #reportButton, #cancelButton { 
+                font-size: 0.85rem; padding: 8px 15px; margin: 5px; 
             }
-            #map { height: calc(100vh - 180px); }
-            #buttonContainer { height: 50px; }
-            .search-item { font-size: 0.85rem; padding: 8px 12px; }
+            #map { height: calc(100vh - 220px); }
+            #buttonContainer { flex-direction: column; gap: 10px; }
         }
     </style>
 </head>
@@ -121,7 +123,7 @@
         <button id="locateButton" onclick="locateUser()">Locate Me</button>
         <button id="toggleMapButton" onclick="toggleBaseMap()">Switch to Map</button>
         <button id="addAssetButton" onclick="startAddingAsset()">Add Asset</button>
-        <button id="reportButton" onclick="generateReport()">Generate Report</button>
+        <button id="reportButton" onclick="startReportGeneration()">Generate Report</button>
     </div>
    
     <div id="map"></div>
@@ -287,10 +289,10 @@
                     <option value="">Select Substation (optional)</option>
                     ${markers.filter(m => m.category === 'substation').map(m => `<option value="${m.name}">${m.name}</option>`).join('')}
                 </select>
-                <button onclick="cancelAddingAsset()">Cancel</button>
+                <button id="cancelButton" onclick="cancelAddingAsset()">Cancel</button>
             `;
             map.on('click', addAsset);
-            alert('Click on the map to place the new asset');
+            alert('Select asset type, enter name (optional), choose substation (optional), then click on the map to place the asset');
         }
 
         function cancelAddingAsset() {
@@ -322,6 +324,7 @@
                 </select>
                 <div id="searchResults"></div>
             `;
+            document.getElementById('searchBox').addEventListener('keyup', searchHandler);
         }
 
         function addAsset(e) {
@@ -349,35 +352,64 @@
             updatePopups();
         }
 
+        function startReportGeneration() {
+            document.getElementById('searchContainer').innerHTML = `
+                <select id="reportType">
+                    <option value="rmuPerSubstation">RMUs per Substation</option>
+                    <option value="oldRMUs">RMUs older than 10 years</option>
+                    <option value="oldDTs">DTs older than 5 years</option>
+                </select>
+                <button id="generateReportBtn" onclick="generateReport()">Generate Excel Report</button>
+                <button id="cancelButton" onclick="cancelAddingAsset()">Cancel</button>
+            `;
+        }
+
         function generateReport() {
-            var report = "Electrical Infrastructure Report\n\n";
+            var reportType = document.getElementById('reportType').value;
             var currentDate = new Date();
-            
-            // Total RMUs per substation
-            var substations = {};
-            markers.filter(m => m.category === 'rmu').forEach(function(rmu) {
-                var sub = rmu.attributes.connectedSubstation || 'Unconnected';
-                substations[sub] = (substations[sub] || 0) + 1;
-            });
-            report += "RMUs per Substation:\n";
-            for (var sub in substations) {
-                report += `${sub}: ${substations[sub]}\n`;
+            var wb = XLSX.utils.book_new();
+            var ws_data = [];
+            var ws_name = "Report";
+
+            if (reportType === 'rmuPerSubstation') {
+                ws_data.push(["Substation", "RMU Count", "RMU Name", "Latitude", "Longitude"]);
+                var substations = {};
+                markers.filter(m => m.category === 'rmu').forEach(function(rmu) {
+                    var sub = rmu.attributes.connectedSubstation || 'Unconnected';
+                    if (!substations[sub]) substations[sub] = [];
+                    substations[sub].push(rmu);
+                });
+                for (var sub in substations) {
+                    substations[sub].forEach(function(rmu, index) {
+                        if (index === 0) {
+                            ws_data.push([sub, substations[sub].length, rmu.name, rmu.lat, rmu.lon]);
+                        } else {
+                            ws_data.push(["", "", rmu.name, rmu.lat, rmu.lon]);
+                        }
+                    });
+                }
+            } else if (reportType === 'oldRMUs') {
+                ws_data.push(["RMU Name", "Install Date", "Latitude", "Longitude"]);
+                var tenYearsAgo = new Date(currentDate.setFullYear(currentDate.getFullYear() - 10));
+                markers.filter(m => m.category === 'rmu' && 
+                    new Date(m.attributes.installDate) <= tenYearsAgo)
+                    .forEach(function(rmu) {
+                        ws_data.push([rmu.name, rmu.attributes.installDate, rmu.lat, rmu.lon]);
+                    });
+            } else if (reportType === 'oldDTs') {
+                ws_data.push(["DT Name", "Install Date", "Latitude", "Longitude"]);
+                var fiveYearsAgo = new Date(currentDate.setFullYear(currentDate.getFullYear() - 5));
+                markers.filter(m => m.category === 'dt' && 
+                    new Date(m.attributes.installDate) <= fiveYearsAgo)
+                    .forEach(function(dt) {
+                        ws_data.push([dt.name, dt.attributes.installDate, dt.lat, dt.lon]);
+                    });
             }
 
-            // RMUs older than 10 years
-            var tenYearsAgo = new Date(currentDate.setFullYear(currentDate.getFullYear() - 10));
-            var oldRMUs = markers.filter(m => m.category === 'rmu' && 
-                new Date(m.attributes.installDate) <= tenYearsAgo);
-            report += `\nRMUs older than 10 years: ${oldRMUs.length}\n`;
-
-            // DTs older than 5 years
-            var fiveYearsAgo = new Date(currentDate.setFullYear(currentDate.getFullYear() - 5));
-            var oldDTs = markers.filter(m => m.category === 'dt' && 
-                new Date(m.attributes.installDate) <= fiveYearsAgo);
-            report += `DTs older than 5 years: ${oldDTs.length}\n`;
-
-            alert(report);
-            console.log(report); // For debugging or future export
+            var ws = XLSX.utils.aoa_to_sheet(ws_data);
+            XLSX.utils.book_append_sheet(wb, ws, ws_name);
+            XLSX.writeFile(wb, `${reportType}_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+            cancelAddingAsset();
         }
 
         function updateLocation(position) {
@@ -427,7 +459,7 @@
             }
         }
 
-        document.getElementById("searchBox").addEventListener("keyup", function () {
+        function searchHandler() {
             var searchText = this.value.toLowerCase();
             var resultsDiv = document.getElementById("searchResults");
             var selectedCategory = document.getElementById('filterSelect').value;
@@ -450,7 +482,9 @@
                     }
                 });
             }
-        });
+        }
+
+        document.getElementById("searchBox").addEventListener("keyup", searchHandler);
     </script>
 </body>
 </html>
