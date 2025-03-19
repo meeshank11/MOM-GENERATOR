@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Electrical Infrastructure Map</title>
 
-    <!-- OpenLayers CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
 
-    <!-- OpenLayers JS -->
-    <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
 
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
@@ -72,7 +72,6 @@
             50% { opacity: 0.3; }
             100% { opacity: 1; }
         }
-        /* Modal Styles */
         .modal {
             display: none; position: fixed; z-index: 1001; left: 0; top: 0;
             width: 100%; height: 100%; overflow: auto; background: rgba(0,0,0,0.5);
@@ -152,127 +151,479 @@
     </div>
 
     <script>
-        // OpenLayers Map Initialization
-        const map = new ol.Map({
-            target: 'map',
-            layers: [
-                new ol.layer.Tile({
-                    source: new ol.source.OSM()
-                })
-            ],
-            view: new ol.View({
-                center: ol.proj.fromLonLat([86.13745, 22.80222549]),
-                zoom: 13
-            })
+        var map = L.map('map').setView([22.80222549, 86.13745], 13);
+        var addingAsset = false;
+        var userLocation = null;
+        var userMarker = null;
+
+        var satelliteLayer = L.tileLayer('http://www.google.cn/maps/vt?lyrs=s@189&gl=cn&x={x}&y={y}&z={z}', {
+            attribution: '© Google Satellite'
+        });
+        var osmLayer = L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}', {
+            attribution: '© OpenStreetMap contributors'
         });
 
-        // Marker Layer
-        const vectorLayer = new ol.layer.Vector({
-            source: new ol.source.Vector()
-        });
-        map.addLayer(vectorLayer);
+        satelliteLayer.addTo(map);
+        var currentLayer = 'satellite';
 
-        // Function to add a marker
-        function addMarker(lon, lat, name, category, attributes) {
-            const iconStyle = new ol.style.Style({
-                image: new ol.style.Icon({
-                    src: `https://img.icons8.com/color/48/${category}.png`,
-                    scale: 0.5
-                })
-            });
-
-            const feature = new ol.Feature({
-                geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])
-            });
-            feature.setStyle(iconStyle);
-            feature.set('name', name);
-            feature.set('category', category);
-            feature.set('attributes', attributes);
-
-            vectorLayer.getSource().addFeature(feature);
+        function toggleBaseMap() {
+            if (currentLayer === 'satellite') {
+                map.removeLayer(satelliteLayer);
+                osmLayer.addTo(map);
+                currentLayer = 'osm';
+                document.getElementById('toggleMapButton').textContent = 'Switch to Satellite';
+            } else {
+                map.removeLayer(osmLayer);
+                satelliteLayer.addTo(map);
+                currentLayer = 'satellite';
+                document.getElementById('toggleMapButton').textContent = 'Switch to Map';
+            }
         }
 
-        // Example Markers
-        addMarker(86.137317, 22.7852528, "RMU-1", "rmu", { connectedSubstation: "Sub-station-1", installDate: "2010-03-19" });
-        addMarker(86.1499, 22.7892343, "DT-1", "dt", { connectedSubstation: "Sub-station-1", installDate: "2018-03-19" });
+        var icons = {
+            rmu: L.icon({ iconUrl: 'https://img.icons8.com/color/48/electrical.png', iconSize: [20, 20] }),
+            dt: L.icon({ iconUrl: 'https://img.icons8.com/color/48/transformer.png', iconSize: [20, 20] }),
+            fp: L.icon({ iconUrl: 'https://img.icons8.com/color/48/electricity.png', iconSize: [20, 20] }),
+            poles: L.icon({ iconUrl: 'https://img.icons8.com/color/48/power-pole.png', iconSize: [20, 20] }),
+            abs: L.icon({ iconUrl: 'https://img.icons8.com/color/48/switch.png', iconSize: [20, 20] }),
+            lbs: L.icon({ iconUrl: 'https://img.icons8.com/color/48/breaker.png', iconSize: [20, 20] }),
+            earthpit: L.icon({ iconUrl: 'https://img.icons8.com/color/48/ground.png', iconSize: [20, 20] }),
+            cabledepth: L.icon({ iconUrl: 'https://img.icons8.com/color/48/cable.png', iconSize: [20, 20] }),
+            sourcesubstation: L.icon({ iconUrl: 'https://img.icons8.com/color/48/power-plant.png', iconSize: [20, 20] }),
+            substation: L.icon({ iconUrl: 'https://img.icons8.com/color/48/substation.png', iconSize: [20, 20], className: 'blinking-substation' }),
+            cablejoint: L.icon({ iconUrl: 'https://img.icons8.com/color/48/joint.png', iconSize: [20, 20] }),
+            routemarker: L.icon({ iconUrl: 'https://img.icons8.com/color/48/marker.png', iconSize: [20, 20] }),
+            cpss: L.icon({ iconUrl: 'https://img.icons8.com/color/48/control-panel.png', iconSize: [20, 20] }),
+            db: L.icon({ iconUrl: 'https://img.icons8.com/color/48/distribution-box.png', iconSize: [20, 20] }),
+            '132kvtower': L.icon({ iconUrl: 'https://img.icons8.com/color/48/transmission-tower.png', iconSize: [20, 20] }),
+            lilo: L.icon({ iconUrl: 'https://img.icons8.com/color/48/loop.png', iconSize: [20, 20] }),
+            htmeteringunit: L.icon({ iconUrl: 'https://img.icons8.com/color/48/meter.png', iconSize: [20, 20] }),
+            meter: L.icon({ iconUrl: 'https://img.icons8.com/color/48/smart-meter.png', iconSize: [20, 20] }),
+            hdd: L.icon({ iconUrl: 'https://img.icons8.com/color/48/hdd.png', iconSize: [20, 20] }),
+            powertransformer: L.icon({ iconUrl: 'https://img.icons8.com/color/48/transformer.png', iconSize: [20, 20] }),
+            breaker: L.icon({ iconUrl: 'https://img.icons8.com/color/48/breaker.png', iconSize: [20, 20] }),
+            ltconsumer: L.icon({ iconUrl: 'https://img.icons8.com/color/48/user.png', iconSize: [20, 20] }),
+            htconsumer: L.icon({ iconUrl: 'https://img.icons8.com/color/48/user.png', iconSize: [20, 20] }),
+            location: L.icon({ iconUrl: 'https://img.icons8.com/color/48/street-view.png', iconSize: [25, 25] })
+        };
 
-        // Locate User
+        var locations = [
+            ["RMU-1", 22.7852528, 86.137317, "rmu", { connectedSubstation: "Sub-station-1", installDate: "2010-03-19" }],
+            ["DT-1", 22.7892343, 86.1499, "dt", { connectedSubstation: "Sub-station-1", installDate: "2018-03-19" }],
+        ];
+
+        var markers = [];
+        var layerGroups = {};
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            var R = 6371;
+            var dLat = (lat2 - lat1) * Math.PI / 180;
+            var dLon = (lon2 - lon1) * Math.PI / 180;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return (R * c).toFixed(2);
+        }
+
+        function getPopupContent(item) {
+            var distance = userLocation ? calculateDistance(userLocation[0], userLocation[1], item.lat, item.lon) : "N/A";
+            var attributes = item.attributes || {};
+            var content = `<b style="font-size: 1.1rem; color: #007bff;">${item.name}</b><br>Type: ${item.category}<br>`;
+            for (var key in attributes) {
+                content += `${key}: ${attributes[key]}<br>`;
+            }
+            content += `📍 <a href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank" style="color: #dc3545; text-decoration: none;">View on Google Maps</a><br>`;
+            content += `📏 <span style="color: #6c757d;">Distance: ${distance} km</span>`;
+            return content;
+        }
+
+        function updatePopups() {
+            markers.forEach(function (item) {
+                item.marker.bindPopup(getPopupContent(item));
+                if (item.marker.isPopupOpen()) {
+                    item.marker.setPopupContent(getPopupContent(item));
+                }
+            });
+        }
+
+        Object.keys(icons).forEach(function(category) {
+            if (category !== 'location') {
+                layerGroups[category] = L.layerGroup();
+            }
+        });
+
+        locations.forEach(function (loc) {
+            var marker = L.marker([loc[1], loc[2]], { icon: icons[loc[3]] });
+            marker.bindPopup(getPopupContent({ name: loc[0], lat: loc[1], lon: loc[2], category: loc[3], attributes: loc[4] }));
+            markers.push({ marker: marker, name: loc[0], lat: loc[1], lon: loc[2], category: loc[3], attributes: loc[4] });
+            layerGroups[loc[3]].addLayer(marker);
+        });
+
+        Object.values(layerGroups).forEach(function(layer) {
+            layer.addTo(map);
+        });
+
+        updatePopups();
+
+        function filterMarkers() {
+            var selectedCategory = document.getElementById('filterSelect').value;
+            Object.keys(layerGroups).forEach(function(category) {
+                if (selectedCategory === 'all' || category === selectedCategory) {
+                    if (!map.hasLayer(layerGroups[category])) {
+                        layerGroups[category].addTo(map);
+                    }
+                } else {
+                    if (map.hasLayer(layerGroups[category])) {
+                        map.removeLayer(layerGroups[category]);
+                    }
+                }
+            });
+            updatePopups();
+        }
+
         function locateUser() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition((position) => {
-                    const userLocation = ol.proj.fromLonLat([position.coords.longitude, position.coords.latitude]);
-                    map.getView().setCenter(userLocation);
-                    map.getView().setZoom(15);
-
-                    const userMarker = new ol.Feature({
-                        geometry: new ol.geom.Point(userLocation)
-                    });
-                    userMarker.setStyle(new ol.style.Style({
-                        image: new ol.style.Icon({
-                            src: 'https://img.icons8.com/color/48/street-view.png',
-                            scale: 0.5
-                        })
-                    }));
-                    vectorLayer.getSource().addFeature(userMarker);
-                });
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        userLocation = [position.coords.latitude, position.coords.longitude];
+                        if (userMarker) {
+                            map.removeLayer(userMarker);
+                        }
+                        userMarker = L.marker(userLocation, { icon: icons['location'] }).addTo(map);
+                        userMarker.bindPopup("You are here!").openPopup();
+                        map.setView(userLocation, 15);
+                        updatePopups();
+                    },
+                    function(error) {
+                        alert("Unable to retrieve your location: " + error.message);
+                    }
+                );
             } else {
                 alert("Geolocation is not supported by this browser.");
             }
         }
 
-        // Search and Filter Functionality
-        document.getElementById('searchBox').addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            const features = vectorLayer.getSource().getFeatures();
-            const results = features.filter(f => f.get('name').toLowerCase().includes(query));
-            const resultsDiv = document.getElementById('searchResults');
-            if (query && results.length > 0) {
-                resultsDiv.style.display = 'block';
-                resultsDiv.innerHTML = results.map(r => `<div class="search-item" onclick="map.getView().setCenter(ol.proj.fromLonLat([${r.getGeometry().getCoordinates()[0]}, ${r.getGeometry().getCoordinates()[1]}));">${r.get('name')} (${r.get('category')})</div>`).join('');
-            } else {
-                resultsDiv.style.display = 'none';
-            }
-        });
-
-        // Add Asset Functionality
         function startAddingAsset() {
-            document.getElementById('assetModal').style.display = 'block';
+            addingAsset = true;
+            var modal = document.getElementById('assetModal');
+            modal.style.display = 'block';
+            updateAssetForm();
+        }
+
+        function updateAssetForm() {
+            var formHtml = `
+                <div class="form-group">
+                    <label for="assetType">Asset Type</label>
+                    <select id="assetType" onchange="updateAssetFormFields()">
+                        ${Object.keys(icons).filter(k => k !== 'location').map(k => `<option value="${k}">${k.toUpperCase()}</option>`).join('')}
+                    </select>
+                </div>
+                <div id="assetFormFields"></div>
+            `;
+            document.getElementById('assetFormContainer').innerHTML = formHtml;
+            updateAssetFormFields();
+        }
+
+        function updateAssetFormFields() {
+            var assetType = document.getElementById('assetType').value;
+            var formFields = '';
+
+            if (assetType === 'rmu') {
+                formFields = `
+                    <div class="form-group"><label>RMU Name</label><input type="text" id="rmuName" placeholder="RMU Name"></div>
+                    <div class="form-group"><label>Type of Installation</label><select id="typeOfInstallation"><option value="New">New</option><option value="ABS Replacement">ABS Replacement</option></select></div>
+                    <div class="form-group"><label>Replaced ABS Name</label><input type="text" id="replacedABSName" placeholder="Replaced ABS Name"></div>
+                    <div class="form-group"><label>Type of RMU</label><select id="typeOfRMU"><option value="Domestic">Domestic</option><option value="LT-Industrial">LT-Industrial</option><option value="HT-Industrial">HT-Industrial</option><option value="Rural">Rural</option><option value="Commercial">Commercial</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Area</label><select id="area"><option value="ADP">ADP</option><option value="GAM">GAM</option><option value="PH#1">PH#1</option><option value="PH#2">PH#2</option><option value="PH#4">PH#4</option><option value="PH#6">PH#6</option><option value="PH#7">PH#7</option><option value="EMC">EMC</option><option value="GAM RURAL">GAM RURAL</option><option value="SK TOWN">SK TOWN</option><option value="SK RURAL">SK RURAL</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Make</label><select id="make"><option value="ABB">ABB</option><option value="SCHNEIDER">SCHNEIDER</option><option value="SIEMENS">SIEMENS</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Voltage Rating</label><select id="voltageRating"><option value="11 kV">11 kV</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Year of Manufacture</label><input type="text" id="yom" placeholder="Year of Manufacture"></div>
+                    <div class="form-group"><label>Type of RMU (Ways)</label><select id="typeOfRMUWays"><option value="2 Way">2 Way</option><option value="3 Way">3 Way</option><option value="4 Way">4 Way</option><option value="5 Way">5 Way</option></select></div>
+                    <div class="form-group"><label>Connected Sub-Station</label><select id="connectedSubStation"><option value="PH#1">PH#1</option><option value="PH#2">PH#2</option><option value="PH#4">PH#4</option><option value="PH#5">PH#5</option><option value="PH#6">PH#6</option><option value="PH#7">PH#7</option><option value="EMC">EMC</option><option value="SERAIKELA Sub-Station">SERAIKELA Sub-Station</option><option value="BIRBANS Sub-Station">BIRBANS Sub-Station</option><option value="TGS Sub-Station">TGS Sub-Station</option><option value="L/SEC Sub-Station">L/SEC Sub-Station</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Breaker 1 Nomenclature</label><input type="text" id="breaker1" placeholder="Breaker 1"></div>
+                    <div class="form-group"><label>Breaker 2 Nomenclature</label><input type="text" id="breaker2" placeholder="Breaker 2"></div>
+                    <div class="form-group"><label>Breaker 3 Nomenclature</label><input type="text" id="breaker3" placeholder="Breaker 3"></div>
+                    <div class="form-group"><label>Isolator 1 Nomenclature</label><input type="text" id="isolator1" placeholder="Isolator 1"></div>
+                    <div class="form-group"><label>Isolator 2 Nomenclature</label><input type="text" id="isolator2" placeholder="Isolator 2"></div>
+                    <div class="form-group"><label>Serial Number</label><input type="text" id="serialNumber" placeholder="Serial Number"></div>
+                    <div class="form-group"><label>Installation Date</label><input type="date" id="installDate"></div>
+                    <div class="form-group"><label>RFC Date</label><input type="date" id="rfcDate"></div>
+                    <div class="form-group"><label>Charging Date</label><input type="date" id="chargingDate"></div>
+                    <div class="form-group"><label>Vendor Name</label><select id="vendorName"><option value="Alfa Enterprises">Alfa Enterprises</option><option value="Flying Tribal">Flying Tribal</option><option value="Raghav Enterprises">Raghav Enterprises</option><option value="Swapan Electricals">Swapan Electricals</option><option value="Sri Durga Electricals">Sri Durga Electricals</option><option value="Naman Enterprises">Naman Enterprises</option><option value="Rajesh Electricals">Rajesh Electricals</option><option value="Triveni Electricals">Triveni Electricals</option><option value="Electro Engineering">Electro Engineering</option><option value="B&W Engineering">B&W Engineering</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>TSUISL Officer</label><select id="tsuislOfficer"><option value="Baljeet Singh Negi">Baljeet Singh Negi</option><option value="Sumit Ranjan Sinha">Sumit Ranjan Sinha</option><option value="Ashwini Kumar">Ashwini Kumar</option><option value="Smrutikanta Behra">Smrutikanta Behra</option><option value="Vikash Kumar">Vikash Kumar</option><option value="Chiku Kumar">Chiku Kumar</option><option value="Nirmal Karmakar">Nirmal Karmakar</option><option value="Surendra Prasad Singh">Surendra Prasad Singh</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Section</label><select id="section"><option value="DNM">DNM</option><option value="Rural">Rural</option><option value="LT Connection Management">LT Connection Management</option><option value="SK Town">SK Town</option><option value="EPC New Connection">EPC New Connection</option><option value="EPC Capex">EPC Capex</option><option value="Meter">Meter</option><option value="Operation">Operation</option></select></div>
+                    <div class="form-group"><label>Status</label><select id="status"><option value="WIP">WIP</option><option value="RFC">RFC</option><option value="Charged">Charged</option></select></div>
+                    <div class="form-group"><label>Section Approval</label><select id="sectionApproval"><option value="Yes">Yes</option><option value="No">No</option></select></div>
+                    <div class="form-group"><label>Checked By</label><input type="text" id="checkedBy" placeholder="Checked By"></div>
+                    <div class="form-group"><label>Latitude</label><input type="number" id="latitude" placeholder="Latitude" step="0.0000001" value="${userLocation ? userLocation[0] : ''}"></div>
+                    <div class="form-group"><label>Longitude</label><input type="number" id="longitude" placeholder="Longitude" step="0.0000001" value="${userLocation ? userLocation[1] : ''}"></div>
+                    <div class="form-group"><label>GIS Updated By</label><select id="updatedBy"><option value="MLJ">MLJ</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>GIS Update Date</label><input type="date" id="gisUpdateDate"></div>
+                `;
+            } else if (assetType === 'poles') {
+                formFields = `
+                    <div class="form-group"><label>Pole Number</label><input type="text" id="poleNumber" placeholder="Pole Number"></div>
+                    <div class="form-group"><label>Pole Usage</label><select id="poleUsage"><option value="Network">Network</option><option value="Service">Service</option><option value="Network + Service">Network + Service</option></select></div>
+                    <div class="form-group"><label>Existence Type</label><select id="existenceType"><option value="New">New</option><option value="Already Existing">Already Existing</option></select></div>
+                    <div class="form-group"><label>Connected BP Numbers</label><input type="text" id="connectedBPNumbers" placeholder="e.g., 112031, 112062"></div>
+                    <div class="form-group"><label>Area or Landmark</label><input type="text" id="areaOrLandmark" placeholder="Area or Landmark"></div>
+                    <div class="form-group"><label>Pole Type</label><select id="poleType"><option value="Rail Pole">Rail Pole</option><option value="Concrete Pole">Concrete Pole</option></select></div>
+                    <div class="form-group"><label>Location Type</label><select id="locationType"><option value="Domestic Area">Domestic Area</option><option value="Commercial Area">Commercial Area</option><option value="Industrial Area">Industrial Area</option><option value="Rural Area">Rural Area</option></select></div>
+                    <div class="form-group"><label>SP or DP</label><select id="spOrDp"><option value="SP">SP</option><option value="DP">DP</option></select></div>
+                    <div class="form-group"><label>Height (m)</label><select id="height"><option value="8m">8m</option><option value="9m">9m</option><option value="12.8m">12.8m</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Material</label><select id="material"><option value="Iron">Iron</option><option value="Concrete">Concrete</option></select></div>
+                    <div class="form-group"><label>Voltage Level</label><select id="voltageLevel"><option value="132kV">132kV</option><option value="33kV">33kV</option><option value="11kV">11kV</option><option value="0.41kV">0.41kV</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Connected FP</label><input type="text" id="connectedFP" placeholder="Connected FP"></div>
+                    <div class="form-group"><label>Connected DT</label><input type="text" id="connectedDT" placeholder="Connected DT"></div>
+                    <div class="form-group"><label>Connected RMU</label><input type="text" id="connectedRMU" placeholder="Connected RMU"></div>
+                    <div class="form-group"><label>Connected Sub-Station</label><input type="text" id="connectedSubStation" placeholder="Connected Sub-Station"></div>
+                    <div class="form-group"><label>Installation Date</label><input type="date" id="installDate"></div>
+                    <div class="form-group"><label>TSUISL Officer</label><select id="tsuislOfficer"><option value="Baljeet Singh Negi">Baljeet Singh Negi</option><option value="Sumit Ranjan Sinha">Sumit Ranjan Sinha</option><option value="Ashwini Kumar">Ashwini Kumar</option><option value="Smrutikanta Behra">Smrutikanta Behra</option><option value="Vikash Kumar">Vikash Kumar</option><option value="Chiku Kumar">Chiku Kumar</option><option value="Nirmal Karmakar">Nirmal Karmakar</option><option value="Surendra Prasad Singh">Surendra Prasad Singh</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Section</label><select id="section"><option value="DNM">DNM</option><option value="Rural">Rural</option><option value="LT Connection Management">LT Connection Management</option><option value="SK Town">SK Town</option><option value="EPC New Connection">EPC New Connection</option><option value="EPC Capex">EPC Capex</option><option value="Meter">Meter</option><option value="Operation">Operation</option></select></div>
+                    <div class="form-group"><label>Vendor Name</label><select id="vendorName"><option value="Alfa Enterprises">Alfa Enterprises</option><option value="Flying Tribal">Flying Tribal</option><option value="Raghav Enterprises">Raghav Enterprises</option><option value="Swapan Electricals">Swapan Electricals</option><option value="Sri Durga Electricals">Sri Durga Electricals</option><option value="Naman Enterprises">Naman Enterprises</option><option value="Rajesh Electricals">Rajesh Electricals</option><option value="Triveni Electricals">Triveni Electricals</option><option value="Electro Engineering">Electro Engineering</option><option value="B&W Engineering">B&W Engineering</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Prepared By</label><input type="text" id="preparedBy" placeholder="Prepared By"></div>
+                    <div class="form-group"><label>Section Approval</label><select id="sectionApproval"><option value="Yes">Yes</option><option value="No">No</option></select></div>
+                    <div class="form-group"><label>Checked By</label><input type="text" id="checkedBy" placeholder="Checked By"></div>
+                    <div class="form-group"><label>GIS Updated By</label><select id="updatedBy"><option value="MLJ">MLJ</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>GIS Update Date</label><input type="date" id="gisUpdateDate"></div>
+                    <div class="form-group"><label>Latitude</label><input type="number" id="latitude" placeholder="Latitude" step="0.0000001" value="${userLocation ? userLocation[0] : ''}"></div>
+                    <div class="form-group"><label>Longitude</label><input type="number" id="longitude" placeholder="Longitude" step="0.0000001" value="${userLocation ? userLocation[1] : ''}"></div>
+                `;
+            } else if (assetType === 'ltconsumer') {
+                formFields = `
+                    <div class="form-group"><label>Application Number</label><input type="text" id="applicationNumber" placeholder="Application Number"></div>
+                    <div class="form-group"><label>Application Date</label><input type="date" id="applicationDate"></div>
+                    <div class="form-group"><label>Type of Application</label><select id="typeOfApplication"><option value="New Connection">New Connection</option><option value="Load Enhancement">Load Enhancement</option><option value="Meter Shifting">Meter Shifting</option><option value="Meter Replacement">Meter Replacement</option></select></div>
+                    <div class="form-group"><label>BP Number</label><input type="text" id="bpNumber" placeholder="BP Number"></div>
+                    <div class="form-group"><label>BP Name</label><input type="text" id="bpName" placeholder="BP Name"></div>
+                    <div class="form-group"><label>Type of Consumer</label><select id="typeOfConsumer"><option value="DSHT">DSHT</option><option value="DSRU-CS5KW">DSRU-CS5KW</option><option value="DSUR-CS5KW">DSUR-CS5KW</option><option value="HTS11KV">HTS11KV</option><option value="HTS33KV">HTS33KV</option><option value="HTSS11KV">HTSS11KV</option><option value="HTSS33KV">HTSS33KV</option><option value="NMHTS11KV">NMHTS11KV</option><option value="NMHTS33KV">NMHTS33KV</option><option value="TEMP_COMM">TEMP_COMM</option><option value="CS-RURAL">CS-RURAL</option><option value="CS-URBAN">CS-URBAN</option><option value="DS-RURAL">DS-RURAL</option><option value="DS-URBAN">DS-URBAN</option><option value="LTINDS">LTINDS</option><option value="LTIS">LTIS</option><option value="LTNDS2">LTNDS2</option><option value="NMCS-RURAL">NMCS-RURAL</option><option value="NMCS-URBAN">NMCS-URBAN</option></select></div>
+                    <div class="form-group"><label>Phase Type</label><select id="phaseType"><option value="1 Ph">1 Ph</option><option value="3 Ph">3 Ph</option></select></div>
+                    <div class="form-group"><label>Sanctioned Load (kW)</label><input type="text" id="sanctionedLoad" placeholder="e.g., 4kW"></div>
+                    <div class="form-group"><label>Contact Number 1</label><input type="text" id="contactNumber1" placeholder="Contact Number 1"></div>
+                    <div class="form-group"><label>Contact Number 2</label><input type="text" id="contactNumber2" placeholder="Contact Number 2"></div>
+                    <div class="form-group"><label>Email ID</label><input type="email" id="emailId" placeholder="Email ID"></div>
+                    <div class="form-group"><label>Meter Make</label><select id="meterMake"><option value="SARAL">SARAL</option><option value="GENUS">GENUS</option><option value="L&T">L&T</option><option value="SECURE">SECURE</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Meter Model</label><select id="meterModel"><option value="Trienergy">Trienergy</option><option value="Premier 300">Premier 300</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Meter Type</label><select id="meterType"><option value="Smart">Smart</option><option value="Non-Smart">Non-Smart</option></select></div>
+                    <div class="form-group"><label>Meter Serial Number</label><input type="text" id="meterSerialNumber" placeholder="Meter Serial Number"></div>
+                    <div class="form-group"><label>Meter Make Date</label><input type="date" id="meterMakeDate"></div>
+                    <div class="form-group"><label>Area</label><input type="text" id="area" placeholder="Area"></div>
+                    <div class="form-group"><label>Address</label><input type="text" id="address" placeholder="Address"></div>
+                    <div class="form-group"><label>Connected Pole</label><input type="text" id="connectedPole" placeholder="Connected Pole"></div>
+                    <div class="form-group"><label>Connected Feeder Pillar</label><input type="text" id="connectedFeederPillar" placeholder="Connected Feeder Pillar"></div>
+                    <div class="form-group"><label>Connected DT</label><input type="text" id="connectedDT" placeholder="Connected DT"></div>
+                    <div class="form-group"><label>Connected RMU</label><input type="text" id="connectedRMU" placeholder="Connected RMU"></div>
+                    <div class="form-group"><label>Connected Sub-Station</label><select id="connectedSubStation"><option value="Phase 1">Phase 1</option><option value="Phase 2">Phase 2</option><option value="Phase 4">Phase 4</option><option value="Phase 5">Phase 5</option><option value="Phase 6">Phase 6</option><option value="Phase 7">Phase 7</option><option value="EMC">EMC</option><option value="TGS">TGS</option><option value="LS">LS</option><option value="Seraikela S/S">Seraikela S/S</option><option value="Birbans S/S">Birbans S/S</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Service Status</label><select id="serviceStatus"><option value="RFC">RFC</option><option value="Charged">Charged</option></select></div>
+                    <div class="form-group"><label>RFC Date</label><input type="date" id="rfcDate"></div>
+                    <div class="form-group"><label>Charging Date</label><input type="date" id="chargingDate"></div>
+                    <div class="form-group"><label>Vendor Name</label><select id="vendorName"><option value="Alfa Enterprises">Alfa Enterprises</option><option value="Flying Tribal">Flying Tribal</option><option value="Raghav Enterprises">Raghav Enterprises</option><option value="Swapan Electricals">Swapan Electricals</option><option value="Sri Durga Electricals">Sri Durga Electricals</option><option value="Naman Enterprises">Naman Enterprises</option><option value="Rajesh Electricals">Rajesh Electricals</option><option value="Triveni Electricals">Triveni Electricals</option><option value="Electro Engineering">Electro Engineering</option><option value="B&W Engineering">B&W Engineering</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>TSUISL Officer</label><select id="tsuislOfficer"><option value="Sumit Ranjan Sinha">Sumit Ranjan Sinha</option><option value="Ashwini Kumar">Ashwini Kumar</option><option value="Smrutikanta Behra">Smrutikanta Behra</option><option value="Vikash Kumar">Vikash Kumar</option><option value="Chiku Kumar">Chiku Kumar</option><option value="Nirmal Karmakar">Nirmal Karmakar</option><option value="Surendra Prasad Singh">Surendra Prasad Singh</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>Section</label><select id="section"><option value="DNM">DNM</option><option value="Rural">Rural</option><option value="LT Connection Management">LT Connection Management</option><option value="SK Town">SK Town</option><option value="EPC New Connection">EPC New Connection</option><option value="EPC Capex">EPC Capex</option><option value="Meter">Meter</option><option value="Operation">Operation</option></select></div>
+                    <div class="form-group"><label>Prepared By</label><input type="text" id="preparedBy" placeholder="Prepared By"></div>
+                    <div class="form-group"><label>Section Approval</label><select id="sectionApproval"><option value="Yes">Yes</option><option value="No">No</option></select></div>
+                    <div class="form-group"><label>Checked By</label><input type="text" id="checkedBy" placeholder="Checked By"></div>
+                    <div class="form-group"><label>GIS Updated By</label><select id="updatedBy"><option value="MLJ">MLJ</option><option value="Other">Other</option></select></div>
+                    <div class="form-group"><label>GIS Update Date</label><input type="date" id="gisUpdateDate"></div>
+                    <div class="form-group"><label>Latitude</label><input type="number" id="latitude" placeholder="Latitude" step="0.0000001" value="${userLocation ? userLocation[0] : ''}"></div>
+                    <div class="form-group"><label>Longitude</label><input type="number" id="longitude" placeholder="Longitude" step="0.0000001" value="${userLocation ? userLocation[1] : ''}"></div>
+                `;
+            } else {
+                formFields = `
+                    <div class="form-group"><label>Asset Name</label><input type="text" id="assetName" placeholder="Asset Name"></div>
+                    <div class="form-group"><label>Latitude</label><input type="number" id="latitude" placeholder="Latitude" step="0.0000001" value="${userLocation ? userLocation[0] : ''}"></div>
+                    <div class="form-group"><label>Longitude</label><input type="number" id="longitude" placeholder="Longitude" step="0.0000001" value="${userLocation ? userLocation[1] : ''}"></div>
+                    <div class="form-group"><label>Installation Date</label><input type="date" id="installDate"></div>
+                `;
+            }
+
+            document.getElementById('assetFormFields').innerHTML = formFields;
         }
 
         function submitAsset() {
-            const assetType = document.getElementById('assetType').value;
-            const lat = parseFloat(document.getElementById('latitude').value);
-            const lon = parseFloat(document.getElementById('longitude').value);
-            const name = document.getElementById('assetName').value || `${assetType.toUpperCase()}-${vectorLayer.getSource().getFeatures().length + 1}`;
+            var assetType = document.getElementById('assetType').value;
+            var attributes = {};
+            var lat, lon, name;
+
+            if (assetType === 'rmu') {
+                name = document.getElementById('rmuName').value || `RMU-${markers.length + 1}`;
+                attributes.typeOfInstallation = document.getElementById('typeOfInstallation').value;
+                attributes.replacedABSName = document.getElementById('replacedABSName').value;
+                attributes.typeOfRMU = document.getElementById('typeOfRMU').value;
+                attributes.area = document.getElementById('area').value;
+                attributes.make = document.getElementById('make').value;
+                attributes.voltageRating = document.getElementById('voltageRating').value;
+                attributes.yom = document.getElementById('yom').value;
+                attributes.typeOfRMUWays = document.getElementById('typeOfRMUWays').value;
+                attributes.connectedSubStation = document.getElementById('connectedSubStation').value;
+                attributes.breaker1 = document.getElementById('breaker1').value;
+                attributes.breaker2 = document.getElementById('breaker2').value;
+                attributes.breaker3 = document.getElementById('breaker3').value;
+                attributes.isolator1 = document.getElementById('isolator1').value;
+                attributes.isolator2 = document.getElementById('isolator2').value;
+                attributes.serialNumber = document.getElementById('serialNumber').value;
+                attributes.installDate = document.getElementById('installDate').value;
+                attributes.rfcDate = document.getElementById('rfcDate').value;
+                attributes.chargingDate = document.getElementById('chargingDate').value;
+                attributes.vendorName = document.getElementById('vendorName').value;
+                attributes.tsuislOfficer = document.getElementById('tsuislOfficer').value;
+                attributes.section = document.getElementById('section').value;
+                attributes.status = document.getElementById('status').value;
+                attributes.sectionApproval = document.getElementById('sectionApproval').value;
+                attributes.checkedBy = document.getElementById('checkedBy').value;
+                attributes.updatedBy = document.getElementById('updatedBy').value;
+                attributes.gisUpdateDate = document.getElementById('gisUpdateDate').value;
+                lat = parseFloat(document.getElementById('latitude').value);
+                lon = parseFloat(document.getElementById('longitude').value);
+            } else if (assetType === 'poles') {
+                name = document.getElementById('poleNumber').value || `Pole-${markers.length + 1}`;
+                attributes.poleUsage = document.getElementById('poleUsage').value;
+                attributes.existenceType = document.getElementById('existenceType').value;
+                attributes.connectedBPNumbers = document.getElementById('connectedBPNumbers').value;
+                attributes.areaOrLandmark = document.getElementById('areaOrLandmark').value;
+                attributes.poleType = document.getElementById('poleType').value;
+                attributes.locationType = document.getElementById('locationType').value;
+                attributes.spOrDp = document.getElementById('spOrDp').value;
+                attributes.height = document.getElementById('height').value;
+                attributes.material = document.getElementById('material').value;
+                attributes.voltageLevel = document.getElementById('voltageLevel').value;
+                attributes.connectedFP = document.getElementById('connectedFP').value;
+                attributes.connectedDT = document.getElementById('connectedDT').value;
+                attributes.connectedRMU = document.getElementById('connectedRMU').value;
+                attributes.connectedSubStation = document.getElementById('connectedSubStation').value;
+                attributes.installDate = document.getElementById('installDate').value;
+                attributes.tsuislOfficer = document.getElementById('tsuislOfficer').value;
+                attributes.section = document.getElementById('section').value;
+                attributes.vendorName = document.getElementById('vendorName').value;
+                attributes.preparedBy = document.getElementById('preparedBy').value;
+                attributes.sectionApproval = document.getElementById('sectionApproval').value;
+                attributes.checkedBy = document.getElementById('checkedBy').value;
+                attributes.updatedBy = document.getElementById('updatedBy').value;
+                attributes.gisUpdateDate = document.getElementById('gisUpdateDate').value;
+                lat = parseFloat(document.getElementById('latitude').value);
+                lon = parseFloat(document.getElementById('longitude').value);
+            } else if (assetType === 'ltconsumer') {
+                name = document.getElementById('bpName').value || `LTConsumer-${markers.length + 1}`;
+                attributes.applicationNumber = document.getElementById('applicationNumber').value;
+                attributes.applicationDate = document.getElementById('applicationDate').value;
+                attributes.typeOfApplication = document.getElementById('typeOfApplication').value;
+                attributes.bpNumber = document.getElementById('bpNumber').value;
+                attributes.typeOfConsumer = document.getElementById('typeOfConsumer').value;
+                attributes.phaseType = document.getElementById('phaseType').value;
+                attributes.sanctionedLoad = document.getElementById('sanctionedLoad').value;
+                attributes.contactNumber1 = document.getElementById('contactNumber1').value;
+                attributes.contactNumber2 = document.getElementById('contactNumber2').value;
+                attributes.emailId = document.getElementById('emailId').value;
+                attributes.meterMake = document.getElementById('meterMake').value;
+                attributes.meterModel = document.getElementById('meterModel').value;
+                attributes.meterType = document.getElementById('meterType').value;
+                attributes.meterSerialNumber = document.getElementById('meterSerialNumber').value;
+                attributes.meterMakeDate = document.getElementById('meterMakeDate').value;
+                attributes.area = document.getElementById('area').value;
+                attributes.address = document.getElementById('address').value;
+                attributes.connectedPole = document.getElementById('connectedPole').value;
+                attributes.connectedFeederPillar = document.getElementById('connectedFeederPillar').value;
+                attributes.connectedDT = document.getElementById('connectedDT').value;
+                attributes.connectedRMU = document.getElementById('connectedRMU').value;
+                attributes.connectedSubStation = document.getElementById('connectedSubStation').value;
+                attributes.serviceStatus = document.getElementById('serviceStatus').value;
+                attributes.rfcDate = document.getElementById('rfcDate').value;
+                attributes.chargingDate = document.getElementById('chargingDate').value;
+                attributes.vendorName = document.getElementById('vendorName').value;
+                attributes.tsuislOfficer = document.getElementById('tsuislOfficer').value;
+                attributes.section = document.getElementById('section').value;
+                attributes.preparedBy = document.getElementById('preparedBy').value;
+                attributes.sectionApproval = document.getElementById('sectionApproval').value;
+                attributes.checkedBy = document.getElementById('checkedBy').value;
+                attributes.updatedBy = document.getElementById('updatedBy').value;
+                attributes.gisUpdateDate = document.getElementById('gisUpdateDate').value;
+                lat = parseFloat(document.getElementById('latitude').value);
+                lon = parseFloat(document.getElementById('longitude').value);
+            } else {
+                name = document.getElementById('assetName').value || `${assetType.toUpperCase()}-${markers.length + 1}`;
+                attributes.installDate = document.getElementById('installDate').value;
+                lat = parseFloat(document.getElementById('latitude').value);
+                lon = parseFloat(document.getElementById('longitude').value);
+            }
 
             if (isNaN(lat) || isNaN(lon)) {
                 alert('Please enter valid latitude and longitude values.');
                 return;
             }
 
-            addMarker(lon, lat, name, assetType, {});
+            var marker = L.marker([lat, lon], { icon: icons[assetType] });
+            marker.bindPopup(getPopupContent({ name: name, lat: lat, lon: lon, category: assetType, attributes: attributes }));
+            markers.push({ marker: marker, name: name, lat: lat, lon: lon, category: assetType, attributes: attributes });
+            layerGroups[assetType].addLayer(marker);
+            marker.addTo(map);
+
             cancelAddingAsset();
+            updatePopups();
         }
 
         function cancelAddingAsset() {
+            addingAsset = false;
             document.getElementById('assetModal').style.display = 'none';
+            document.getElementById('searchContainer').innerHTML = `
+                <input type="text" id="searchBox" placeholder="Search for infrastructure...">
+                <select id="filterSelect" onchange="filterMarkers()">
+                    <option value="all">All Categories</option>
+                    <option value="rmu">RMU</option>
+                    <option value="dt">DT</option>
+                    <option value="fp">Feeder Pillar</option>
+                    <option value="poles">Poles</option>
+                    <option value="abs">ABS</option>
+                    <option value="lbs">LBS</option>
+                    <option value="earthpit">Earthpit</option>
+                    <option value="cabledepth">Cable Depth</option>
+                    <option value="sourcesubstation">Source Sub-station</option>
+                    <option value="substation">Sub-station</option>
+                    <option value="cablejoint">Cable Joint</option>
+                    <option value="routemarker">Route Marker</option>
+                    <option value="cpss">CPSS</option>
+                    <option value="db">DB</option>
+                    <option value="132kvtower">132kV Tower</option>
+                    <option value="lilo">LILO</option>
+                    <option value="htmeteringunit">HT Metering Unit</option>
+                    <option value="meter">Meter</option>
+                    <option value="hdd">HDD</option>
+                    <option value="powertransformer">Power Transformer</option>
+                    <option value="breaker">Breaker</option>
+                    <option value="ltconsumer">LT Consumer</option>
+                    <option value="htconsumer">HT Consumer</option>
+                </select>
+                <div id="searchResults"></div>
+            `;
+            document.getElementById('searchBox').addEventListener('keyup', searchHandler);
         }
 
-        // Report Generation
+        function searchHandler(e) {
+            var query = e.target.value.toLowerCase();
+            var results = markers.filter(m => m.name.toLowerCase().includes(query));
+            var resultsDiv = document.getElementById('searchResults');
+            if (query && results.length > 0) {
+                resultsDiv.style.display = 'block';
+                resultsDiv.innerHTML = results.map(r => `<div class="search-item" onclick="map.setView([${r.lat}, ${r.lon}], 15);">${r.name} (${r.category})</div>`).join('');
+            } else {
+                resultsDiv.style.display = 'none';
+            }
+        }
+
         function startReportGeneration() {
-            const features = vectorLayer.getSource().getFeatures();
-            const data = features.map(f => ({
-                Name: f.get('name'),
-                Latitude: ol.proj.toLonLat(f.getGeometry().getCoordinates())[1],
-                Longitude: ol.proj.toLonLat(f.getGeometry().getCoordinates())[0],
-                Category: f.get('category'),
-                ...f.get('attributes')
-            }));
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
+            var ws = XLSX.utils.json_to_sheet(markers.map(m => ({
+                Name: m.name,
+                Latitude: m.lat,
+                Longitude: m.lon,
+                Category: m.category,
+                ...m.attributes
+            })));
+            var wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Assets");
             XLSX.writeFile(wb, "Electrical_Infrastructure_Report.xlsx");
         }
+
+        document.getElementById("searchBox").addEventListener("keyup", searchHandler);
     </script>
 </body>
 </html>
