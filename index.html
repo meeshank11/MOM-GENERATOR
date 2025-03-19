@@ -3,182 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meeting Recorder & MOM Generator</title>
+    <title>Interactive Asset Map</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Custom CSS for styling -->
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #74ebd5, #acb6e5);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
         }
-        .container {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            width: 500px;
+        #map {
+            height: 70vh;
+            width: 100%;
+        }
+        #dashboard {
+            padding: 10px;
+            background-color: #f4f4f4;
+            border-bottom: 1px solid #ccc;
             text-align: center;
         }
-        h1 {
-            color: #333;
-            margin-bottom: 30px;
-            font-size: 28px;
+        #controls {
+            padding: 10px;
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
-        .button {
-            padding: 12px 25px;
-            margin: 10px;
+        button {
+            padding: 8px 16px;
+            background-color: #0078d7;
+            color: white;
             border: none;
-            border-radius: 25px;
-            font-size: 16px;
+            border-radius: 4px;
             cursor: pointer;
-            transition: transform 0.2s, background 0.3s;
         }
-        .button:hover {
-            transform: scale(1.05);
+        button:hover {
+            background-color: #005bb5;
         }
-        #recordBtn {
-            background: #ff6b6b;
-            color: white;
+        input[type="text"] {
+            padding: 6px;
+            width: 200px;
         }
-        #stopBtn {
-            background: #4ecdc4;
-            color: white;
-            display: none;
-        }
-        #generateBtn {
-            background: #45b7d1;
-            color: white;
-            display: none;
-        }
-        .share-options {
-            margin-top: 20px;
-            display: none;
-        }
-        .share-btn {
-            background: #f7d794;
-            color: #333;
-            margin: 5px;
-            padding: 10px 20px;
-        }
-        .status {
-            margin-top: 20px;
-            font-size: 14px;
-            color: #666;
-            word-wrap: break-word;
+        @media (max-width: 600px) {
+            #map { height: 60vh; }
+            #dashboard { font-size: 14px; }
+            input[type="text"] { width: 150px; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Meeting Recorder</h1>
-        <button id="recordBtn" class="button">Record Meeting</button>
-        <button id="stopBtn" class="button">Stop Recording</button>
-        <button id="generateBtn" class="button">Generate MOM</button>
-        <div id="shareOptions" class="share-options">
-            <p>Share Minutes of Meeting:</p>
-            <button class="button share-btn" onclick="share('outlook')">Outlook</button>
-            <button class="button share-btn" onclick="share('email')">Email</button>
-            <button class="button share-btn" onclick="share('whatsapp')">WhatsApp</button>
-        </div>
-        <div id="status" class="status">Ready to record</div>
+    <!-- Dashboard -->
+    <div id="dashboard">
+        <h2>Asset Dashboard</h2>
+        <p>Total DTs: <span id="dt-count">0</span> | Total RMUs: <span id="rmu-count">0</span> | Total Poles: <span id="pole-count">0</span></p>
     </div>
 
+    <!-- Controls -->
+    <div id="controls">
+        <input type="text" id="search" placeholder="Search assets...">
+        <button onclick="exportToExcel()">Export to Excel</button>
+    </div>
+
+    <!-- Map Container -->
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- SheetJS for Excel Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
-        const recordBtn = document.getElementById('recordBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const generateBtn = document.getElementById('generateBtn');
-        const shareOptions = document.getElementById('shareOptions');
-        const status = document.getElementById('status');
+        // Initialize the map with Google Maps as the base layer
+        const map = L.map('map').setView([51.505, -0.09], 13); // Default center (London)
 
-        let recognition;
-        let transcript = '';
+        // Google Maps Tile Layer
+        L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+            attribution: 'Map data &copy; Google'
+        }).addTo(map);
 
-        // Check if Web Speech API is available
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            recognition.continuous = true; // Keep recording until stopped
-            recognition.interimResults = true; // Show real-time results
-            recognition.lang = 'en-US'; // Set language
+        // Asset Data (Example)
+        const assets = {
+            distributionTransformers: [
+                { lat: 51.5, lng: -0.09, rating: "500kVA", connectedRMU: "RMU1", substation: "Sub1", make: "ABB", serial: "DT123" },
+                { lat: 51.51, lng: -0.08, rating: "750kVA", connectedRMU: "RMU2", substation: "Sub2", make: "Siemens", serial: "DT456" }
+            ],
+            rmus: [
+                { lat: 51.505, lng: -0.095, name: "RMU1", serial: "RMU123", substation: "Sub1" },
+                { lat: 51.515, lng: -0.085, name: "RMU2", serial: "RMU456", substation: "Sub2" }
+            ],
+            poles: [
+                { lat: 51.502, lng: -0.087, number: "P001", connectedDT: "DT123", connectedFP: "FP1" },
+                { lat: 51.508, lng: -0.092, number: "P002", connectedDT: "DT456", connectedFP: "FP2" }
+            ]
+        };
 
-            recognition.onresult = (event) => {
-                transcript = Array.from(event.results)
-                    .map(result => result[0].transcript)
-                    .join(' ');
-                status.textContent = `Recording... (Live transcript: ${transcript})`;
-            };
+        // Layer Groups
+        const dtLayer = L.layerGroup().addTo(map);
+        const rmuLayer = L.layerGroup().addTo(map);
+        const poleLayer = L.layerGroup().addTo(map);
 
-            recognition.onerror = (event) => {
-                status.textContent = `Error during recording: ${event.error}`;
-            };
-        } else {
-            status.textContent = 'Sorry, your browser does not support speech recognition.';
-        }
-
-        // Start recording and transcription
-        recordBtn.addEventListener('click', () => {
-            if (!recognition) return;
-            transcript = ''; // Reset transcript
-            recognition.start();
-            recordBtn.style.display = 'none';
-            stopBtn.style.display = 'inline-block';
-            status.textContent = 'Recording in progress...';
+        // Add Markers to Map
+        assets.distributionTransformers.forEach(dt => {
+            L.marker([dt.lat, dt.lng], { icon: L.divIcon({ className: 'dt-icon', html: '<div style="color:red;">DT</div>' }) })
+                .bindPopup(`<b>Distribution Transformer</b><br>Rating: ${dt.rating}<br>RMU: ${dt.connectedRMU}<br>Substation: ${dt.substation}<br>Make: ${dt.make}<br>Serial: ${dt.serial}`)
+                .addTo(dtLayer);
         });
 
-        // Stop recording and transcription
-        stopBtn.addEventListener('click', () => {
-            if (!recognition) return;
-            recognition.stop();
-            stopBtn.style.display = 'none';
-            generateBtn.style.display = 'inline-block';
-            status.textContent = 'Recording stopped. Generate MOM?';
+        assets.rmus.forEach(rmu => {
+            L.marker([rmu.lat, rmu.lng], { icon: L.divIcon({ className: 'rmu-icon', html: '<div style="color:blue;">RMU</div>' }) })
+                .bindPopup(`<b>RMU</b><br>Name: ${rmu.name}<br>Serial: ${rmu.serial}<br>Substation: ${rmu.substation}`)
+                .addTo(rmuLayer);
         });
 
-        // Generate MOM
-        generateBtn.addEventListener('click', () => {
-            if (!transcript) {
-                status.textContent = 'No audio recorded to generate MOM.';
-                return;
-            }
-            // Simple summarization (for demo purposes)
-            const mom = generateMOM(transcript);
-            window.generatedMOM = mom;
-            generateBtn.style.display = 'none';
-            shareOptions.style.display = 'block';
-            status.textContent = `MOM: ${mom}`;
+        assets.poles.forEach(pole => {
+            L.marker([pole.lat, pole.lng], { icon: L.divIcon({ className: 'pole-icon', html: '<div style="color:green;">P</div>' }) })
+                .bindPopup(`<b>Pole</b><br>Number: ${pole.number}<br>Connected DT: ${pole.connectedDT}<br>Connected FP: ${pole.connectedFP}`)
+                .addTo(poleLayer);
         });
 
-        // Simple MOM generation function (placeholder for AI summarization)
-        function generateMOM(text) {
-            const timestamp = new Date().toLocaleString();
-            // For demo, just trim and add a header. Real AI would summarize.
-            const summary = text.length > 100 ? text.substring(0, 100) + '...' : text;
-            return `Minutes of Meeting (${timestamp}):\n${summary}`;
-        }
+        // Layer Control
+        const overlayMaps = {
+            "Distribution Transformers": dtLayer,
+            "RMUs": rmuLayer,
+            "Poles": poleLayer
+        };
+        L.control.layers(null, overlayMaps).addTo(map);
 
-        // Share functionality
-        function share(method) {
-            const momText = window.generatedMOM || "No MOM generated yet.";
-            switch(method) {
-                case 'outlook':
-                    status.textContent = 'Outlook sharing requires backend integration.';
-                    alert('Outlook sharing not fully implemented. Use Email or WhatsApp.');
-                    break;
-                case 'email':
-                    const subject = encodeURIComponent('Minutes of Meeting');
-                    const body = encodeURIComponent(momText);
-                    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-                    status.textContent = 'Opening email client...';
-                    break;
-                case 'whatsapp':
-                    const whatsappText = encodeURIComponent(momText);
-                    window.open(`https://wa.me/?text=${whatsappText}`, '_blank');
-                    status.textContent = 'Opening WhatsApp...';
-                    break;
-            }
+        // Update Dashboard
+        document.getElementById('dt-count').textContent = assets.distributionTransformers.length;
+        document.getElementById('rmu-count').textContent = assets.rmus.length;
+        document.getElementById('pole-count').textContent = assets.poles.length;
+
+        // Search Functionality
+        document.getElementById('search').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            dtLayer.eachLayer(layer => layer.getPopup().getContent().toLowerCase().includes(query) ? layer.addTo(map) : map.removeLayer(layer));
+            rmuLayer.eachLayer(layer => layer.getPopup().getContent().toLowerCase().includes(query) ? layer.addTo(map) : map.removeLayer(layer));
+            poleLayer.eachLayer(layer => layer.getPopup().getContent().toLowerCase().includes(query) ? layer.addTo(map) : map.removeLayer(layer));
+        });
+
+        // Export to Excel
+        function exportToExcel() {
+            const wb = XLSX.utils.book_new();
+            const ws1 = XLSX.utils.json_to_sheet(assets.distributionTransformers);
+            const ws2 = XLSX.utils.json_to_sheet(assets.rmus);
+            const ws3 = XLSX.utils.json_to_sheet(assets.poles);
+            XLSX.utils.book_append_sheet(wb, ws1, "DTs");
+            XLSX.utils.book_append_sheet(wb, ws2, "RMUs");
+            XLSX.utils.book_append_sheet(wb, ws3, "Poles");
+            XLSX.writeFile(wb, "AssetMapData.xlsx");
         }
     </script>
 </body>
