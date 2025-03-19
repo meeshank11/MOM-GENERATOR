@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Electrical Infrastructure Map</title>
 
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+    <!-- OpenLayers CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css">
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <!-- OpenLayers JS -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
 
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
@@ -152,320 +152,127 @@
     </div>
 
     <script>
-        var map = L.map('map').setView([22.80222549, 86.13745], 13);
-        var addingAsset = false;
-        var userLocation = null;
-        var userMarker = null;
-
-        var satelliteLayer = L.tileLayer('http://www.google.cn/maps/vt?lyrs=s@189&gl=cn&x={x}&y={y}&z={z}', {
-            attribution: '© Google Satellite'
+        // OpenLayers Map Initialization
+        const map = new ol.Map({
+            target: 'map',
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.OSM()
+                })
+            ],
+            view: new ol.View({
+                center: ol.proj.fromLonLat([86.13745, 22.80222549]),
+                zoom: 13
+            })
         });
-        var osmLayer = L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}', {
-            attribution: '© OpenStreetMap contributors'
+
+        // Marker Layer
+        const vectorLayer = new ol.layer.Vector({
+            source: new ol.source.Vector()
         });
+        map.addLayer(vectorLayer);
 
-        satelliteLayer.addTo(map);
-        var currentLayer = 'satellite';
-
-        function toggleBaseMap() {
-            if (currentLayer === 'satellite') {
-                map.removeLayer(satelliteLayer);
-                osmLayer.addTo(map);
-                currentLayer = 'osm';
-                document.getElementById('toggleMapButton').textContent = 'Switch to Satellite';
-            } else {
-                map.removeLayer(osmLayer);
-                satelliteLayer.addTo(map);
-                currentLayer = 'satellite';
-                document.getElementById('toggleMapButton').textContent = 'Switch to Map';
-            }
-        }
-
-        var icons = {
-            rmu: L.icon({ iconUrl: 'https://img.icons8.com/color/48/electrical.png', iconSize: [20, 20] }),
-            dt: L.icon({ iconUrl: 'https://img.icons8.com/color/48/transformer.png', iconSize: [20, 20] }),
-            fp: L.icon({ iconUrl: 'https://img.icons8.com/color/48/electricity.png', iconSize: [20, 20] }),
-            poles: L.icon({ iconUrl: 'https://img.icons8.com/color/48/power-pole.png', iconSize: [20, 20] }),
-            abs: L.icon({ iconUrl: 'https://img.icons8.com/color/48/switch.png', iconSize: [20, 20] }),
-            lbs: L.icon({ iconUrl: 'https://img.icons8.com/color/48/breaker.png', iconSize: [20, 20] }),
-            earthpit: L.icon({ iconUrl: 'https://img.icons8.com/color/48/ground.png', iconSize: [20, 20] }),
-            cabledepth: L.icon({ iconUrl: 'https://img.icons8.com/color/48/cable.png', iconSize: [20, 20] }),
-            sourcesubstation: L.icon({ iconUrl: 'https://img.icons8.com/color/48/power-plant.png', iconSize: [20, 20] }),
-            substation: L.icon({ 
-                iconUrl: 'https://img.icons8.com/color/48/substation.png', 
-                iconSize: [20, 20],
-                className: 'blinking-substation'
-            }),
-            cablejoint: L.icon({ iconUrl: 'https://img.icons8.com/color/48/joint.png', iconSize: [20, 20] }),
-            routemarker: L.icon({ iconUrl: 'https://img.icons8.com/color/48/marker.png', iconSize: [20, 20] }),
-            cpss: L.icon({ iconUrl: 'https://img.icons8.com/color/48/control-panel.png', iconSize: [20, 20] }),
-            db: L.icon({ iconUrl: 'https://img.icons8.com/color/48/distribution-box.png', iconSize: [20, 20] }),
-            '132kvtower': L.icon({ iconUrl: 'https://img.icons8.com/color/48/transmission-tower.png', iconSize: [20, 20] }),
-            lilo: L.icon({ iconUrl: 'https://img.icons8.com/color/48/loop.png', iconSize: [20, 20] }),
-            htmeteringunit: L.icon({ iconUrl: 'https://img.icons8.com/color/48/meter.png', iconSize: [20, 20] }),
-            meter: L.icon({ iconUrl: 'https://img.icons8.com/color/48/smart-meter.png', iconSize: [20, 20] }),
-            hdd: L.icon({ iconUrl: 'https://img.icons8.com/color/48/hdd.png', iconSize: [20, 20] }),
-            powertransformer: L.icon({ iconUrl: 'https://img.icons8.com/color/48/transformer.png', iconSize: [20, 20] }),
-            breaker: L.icon({ iconUrl: 'https://img.icons8.com/color/48/breaker.png', iconSize: [20, 20] }),
-            ltconsumer: L.icon({ iconUrl: 'https://img.icons8.com/color/48/user.png', iconSize: [20, 20] }),
-            htconsumer: L.icon({ iconUrl: 'https://img.icons8.com/color/48/user.png', iconSize: [20, 20] }),
-            location: L.icon({ iconUrl: 'https://img.icons8.com/color/48/street-view.png', iconSize: [25, 25] })
-        };
-
-        var locations = [
-            ["RMU-1", 22.7852528, 86.137317, "rmu", { connectedSubstation: "Sub-station-1", installDate: "2010-03-19" }],
-            ["DT-1", 22.7892343, 86.1499, "dt", { connectedSubstation: "Sub-station-1", installDate: "2018-03-19" }],
-        ];
-
-        var markers = [];
-        var layerGroups = {};
-
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            var R = 6371;
-            var dLat = (lat2 - lat1) * Math.PI / 180;
-            var dLon = (lon2 - lon1) * Math.PI / 180;
-            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return (R * c).toFixed(2);
-        }
-
-        function getPopupContent(item) {
-            var distance = userLocation ? calculateDistance(userLocation[0], userLocation[1], item.lat, item.lon) : "N/A";
-            var attributes = item.attributes || {};
-            var content = `<b style="font-size: 1.1rem; color: #007bff;">${item.name}</b><br>Type: ${item.category}<br>`;
-            for (var key in attributes) {
-                content += `${key}: ${attributes[key]}<br>`;
-            }
-            content += `📍 <a href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank" style="color: #dc3545; text-decoration: none;">View on Google Maps</a><br>`;
-            content += `📏 <span style="color: #6c757d;">Distance: ${distance} km</span>`;
-            return content;
-        }
-
-        function updatePopups() {
-            markers.forEach(function (item) {
-                item.marker.bindPopup(getPopupContent(item));
-                if (item.marker.isPopupOpen()) {
-                    item.marker.setPopupContent(getPopupContent(item));
-                }
+        // Function to add a marker
+        function addMarker(lon, lat, name, category, attributes) {
+            const iconStyle = new ol.style.Style({
+                image: new ol.style.Icon({
+                    src: `https://img.icons8.com/color/48/${category}.png`,
+                    scale: 0.5
+                })
             });
-        }
 
-        Object.keys(icons).forEach(function(category) {
-            if (category !== 'location') {
-                layerGroups[category] = L.layerGroup();
-            }
-        });
-
-        locations.forEach(function (loc) {
-            var marker = L.marker([loc[1], loc[2]], { icon: icons[loc[3]] });
-            marker.bindPopup(getPopupContent({ name: loc[0], lat: loc[1], lon: loc[2], category: loc[3], attributes: loc[4] }));
-            markers.push({ marker: marker, name: loc[0], lat: loc[1], lon: loc[2], category: loc[3], attributes: loc[4] });
-            layerGroups[loc[3]].addLayer(marker);
-        });
-
-        Object.values(layerGroups).forEach(function(layer) {
-            layer.addTo(map);
-        });
-
-        updatePopups();
-
-        function filterMarkers() {
-            var selectedCategory = document.getElementById('filterSelect').value;
-            Object.keys(layerGroups).forEach(function(category) {
-                if (selectedCategory === 'all' || category === selectedCategory) {
-                    if (!map.hasLayer(layerGroups[category])) {
-                        layerGroups[category].addTo(map);
-                    }
-                } else {
-                    if (map.hasLayer(layerGroups[category])) {
-                        map.removeLayer(layerGroups[category]);
-                    }
-                }
+            const feature = new ol.Feature({
+                geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])
             });
-            updatePopups();
+            feature.setStyle(iconStyle);
+            feature.set('name', name);
+            feature.set('category', category);
+            feature.set('attributes', attributes);
+
+            vectorLayer.getSource().addFeature(feature);
         }
 
+        // Example Markers
+        addMarker(86.137317, 22.7852528, "RMU-1", "rmu", { connectedSubstation: "Sub-station-1", installDate: "2010-03-19" });
+        addMarker(86.1499, 22.7892343, "DT-1", "dt", { connectedSubstation: "Sub-station-1", installDate: "2018-03-19" });
+
+        // Locate User
         function locateUser() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    function(position) {
-                        userLocation = [position.coords.latitude, position.coords.longitude];
-                        if (userMarker) {
-                            map.removeLayer(userMarker);
-                        }
-                        userMarker = L.marker(userLocation, { icon: icons['location'] }).addTo(map);
-                        userMarker.bindPopup("You are here!").openPopup();
-                        map.setView(userLocation, 15);
-                        updatePopups();
-                    },
-                    function(error) {
-                        alert("Unable to retrieve your location: " + error.message);
-                    }
-                );
+                navigator.geolocation.getCurrentPosition((position) => {
+                    const userLocation = ol.proj.fromLonLat([position.coords.longitude, position.coords.latitude]);
+                    map.getView().setCenter(userLocation);
+                    map.getView().setZoom(15);
+
+                    const userMarker = new ol.Feature({
+                        geometry: new ol.geom.Point(userLocation)
+                    });
+                    userMarker.setStyle(new ol.style.Style({
+                        image: new ol.style.Icon({
+                            src: 'https://img.icons8.com/color/48/street-view.png',
+                            scale: 0.5
+                        })
+                    }));
+                    vectorLayer.getSource().addFeature(userMarker);
+                });
             } else {
                 alert("Geolocation is not supported by this browser.");
             }
         }
 
-        function startAddingAsset() {
-            addingAsset = true;
-            var modal = document.getElementById('assetModal');
-            modal.style.display = 'block';
-            updateAssetForm();
-        }
-
-        function updateAssetForm() {
-            var formHtml = `
-                <div class="form-group">
-                    <label for="assetType">Asset Type</label>
-                    <select id="assetType" onchange="updateAssetFormFields()">
-                        ${Object.keys(icons).filter(k => k !== 'location').map(k => `<option value="${k}">${k.toUpperCase()}</option>`).join('')}
-                    </select>
-                </div>
-                <div id="assetFormFields"></div>
-            `;
-            document.getElementById('assetFormContainer').innerHTML = formHtml;
-            updateAssetFormFields();
-        }
-
-        function updateAssetFormFields() {
-            var assetType = document.getElementById('assetType').value;
-            var formFields = '';
-
-            if (assetType === 'rmu') {
-                formFields = `
-                    <div class="form-group"><label>RMU Name</label><input type="text" id="rmuName" placeholder="RMU Name"></div>
-                    <div class="form-group"><label>Type of Installation</label><select id="typeOfInstallation"><option value="New">New</option><option value="ABS Replacement">ABS Replacement</option></select></div>
-                    <div class="form-group"><label>Replaced ABS Name</label><input type="text" id="replacedABSName" placeholder="Replaced ABS Name"></div>
-                    <div class="form-group"><label>Type of RMU</label><select id="typeOfRMU"><option value="Domestic">Domestic</option><option value="LT-Industrial">LT-Industrial</option><option value="HT-Industrial">HT-Industrial</option><option value="Rural">Rural</option><option value="Commercial">Commercial</option><option value="Other">Other</option></select></div>
-                    <div class="form-group"><label>Area</label><select id="area"><option value="ADP">ADP</option><option value="GAM">GAM</option><option value="PH#1">PH#1</option><option value="PH#2">PH#2</option><option value="PH#4">PH#4</option><option value="PH#6">PH#6</option><option value="PH#7">PH#7</option><option value="EMC">EMC</option><option value="GAM RURAL">GAM RURAL</option><option value="SK TOWN">SK TOWN</option><option value="SK RURAL">SK RURAL</option><option value="Other">Other</option></select></div>
-                    <div class="form-group"><label>Latitude</label><input type="number" id="latitude" placeholder="Latitude" step="0.0000001" value="${userLocation ? userLocation[0] : ''}"></div>
-                    <div class="form-group"><label>Longitude</label><input type="number" id="longitude" placeholder="Longitude" step="0.0000001" value="${userLocation ? userLocation[1] : ''}"></div>
-                    <!-- Add more RMU fields as needed -->
-                `;
-            } else if (assetType === 'sourcesubstation') {
-                formFields = `
-                    <div class="form-group"><label>Source Sub-Station Name</label><input type="text" id="sourceSubStationName" placeholder="Source Sub-Station Name"></div>
-                    <div class="form-group"><label>No. of OG Cables</label><input type="number" id="noOGCables" placeholder="No. of OG Cables"></div>
-                    <div class="form-group"><label>Latitude</label><input type="number" id="latitude" placeholder="Latitude" step="0.0000001" value="${userLocation ? userLocation[0] : ''}"></div>
-                    <div class="form-group"><label>Longitude</label><input type="number" id="longitude" placeholder="Longitude" step="0.0000001" value="${userLocation ? userLocation[1] : ''}"></div>
-                `;
+        // Search and Filter Functionality
+        document.getElementById('searchBox').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const features = vectorLayer.getSource().getFeatures();
+            const results = features.filter(f => f.get('name').toLowerCase().includes(query));
+            const resultsDiv = document.getElementById('searchResults');
+            if (query && results.length > 0) {
+                resultsDiv.style.display = 'block';
+                resultsDiv.innerHTML = results.map(r => `<div class="search-item" onclick="map.getView().setCenter(ol.proj.fromLonLat([${r.getGeometry().getCoordinates()[0]}, ${r.getGeometry().getCoordinates()[1]}));">${r.get('name')} (${r.get('category')})</div>`).join('');
             } else {
-                formFields = `
-                    <div class="form-group"><label>Asset Name</label><input type="text" id="assetName" placeholder="Asset Name"></div>
-                    <div class="form-group"><label>Latitude</label><input type="number" id="latitude" placeholder="Latitude" step="0.0000001" value="${userLocation ? userLocation[0] : ''}"></div>
-                    <div class="form-group"><label>Longitude</label><input type="number" id="longitude" placeholder="Longitude" step="0.0000001" value="${userLocation ? userLocation[1] : ''}"></div>
-                    <div class="form-group"><label>Installation Date</label><input type="date" id="installDate" placeholder="Installation Date"></div>
-                `;
+                resultsDiv.style.display = 'none';
             }
+        });
 
-            document.getElementById('assetFormFields').innerHTML = formFields;
+        // Add Asset Functionality
+        function startAddingAsset() {
+            document.getElementById('assetModal').style.display = 'block';
         }
 
         function submitAsset() {
-            var assetType = document.getElementById('assetType').value;
-            var attributes = {};
-            var lat, lon, name;
-
-            if (assetType === 'rmu') {
-                name = document.getElementById('rmuName').value || `RMU-${markers.length + 1}`;
-                attributes.typeOfInstallation = document.getElementById('typeOfInstallation').value;
-                attributes.replacedABSName = document.getElementById('replacedABSName').value;
-                attributes.typeOfRMU = document.getElementById('typeOfRMU').value;
-                attributes.area = document.getElementById('area').value;
-                lat = parseFloat(document.getElementById('latitude').value);
-                lon = parseFloat(document.getElementById('longitude').value);
-            } else if (assetType === 'sourcesubstation') {
-                name = document.getElementById('sourceSubStationName').value || `SourceSS-${markers.length + 1}`;
-                attributes.noOGCables = document.getElementById('noOGCables').value;
-                lat = parseFloat(document.getElementById('latitude').value);
-                lon = parseFloat(document.getElementById('longitude').value);
-            } else {
-                name = document.getElementById('assetName').value || `${assetType.toUpperCase()}-${markers.length + 1}`;
-                lat = parseFloat(document.getElementById('latitude').value);
-                lon = parseFloat(document.getElementById('longitude').value);
-                attributes.installDate = document.getElementById('installDate').value;
-            }
+            const assetType = document.getElementById('assetType').value;
+            const lat = parseFloat(document.getElementById('latitude').value);
+            const lon = parseFloat(document.getElementById('longitude').value);
+            const name = document.getElementById('assetName').value || `${assetType.toUpperCase()}-${vectorLayer.getSource().getFeatures().length + 1}`;
 
             if (isNaN(lat) || isNaN(lon)) {
                 alert('Please enter valid latitude and longitude values.');
                 return;
             }
 
-            var marker = L.marker([lat, lon], { icon: icons[assetType] });
-            marker.bindPopup(getPopupContent({ name: name, lat: lat, lon: lon, category: assetType, attributes: attributes }));
-            markers.push({ marker: marker, name: name, lat: lat, lon: lon, category: assetType, attributes: attributes });
-            layerGroups[assetType].addLayer(marker);
-            marker.addTo(map);
-
+            addMarker(lon, lat, name, assetType, {});
             cancelAddingAsset();
-            updatePopups();
         }
 
         function cancelAddingAsset() {
-            addingAsset = false;
             document.getElementById('assetModal').style.display = 'none';
-            document.getElementById('searchContainer').innerHTML = `
-                <input type="text" id="searchBox" placeholder="Search for infrastructure...">
-                <select id="filterSelect" onchange="filterMarkers()">
-                    <option value="all">All Categories</option>
-                    <option value="rmu">RMU</option>
-                    <option value="dt">DT</option>
-                    <option value="fp">Feeder Pillar</option>
-                    <option value="poles">Poles</option>
-                    <option value="abs">ABS</option>
-                    <option value="lbs">LBS</option>
-                    <option value="earthpit">Earthpit</option>
-                    <option value="cabledepth">Cable Depth</option>
-                    <option value="sourcesubstation">Source Sub-station</option>
-                    <option value="substation">Sub-station</option>
-                    <option value="cablejoint">Cable Joint</option>
-                    <option value="routemarker">Route Marker</option>
-                    <option value="cpss">CPSS</option>
-                    <option value="db">DB</option>
-                    <option value="132kvtower">132kV Tower</option>
-                    <option value="lilo">LILO</option>
-                    <option value="htmeteringunit">HT Metering Unit</option>
-                    <option value="meter">Meter</option>
-                    <option value="hdd">HDD</option>
-                    <option value="powertransformer">Power Transformer</option>
-                    <option value="breaker">Breaker</option>
-                    <option value="ltconsumer">LT Consumer</option>
-                    <option value="htconsumer">HT Consumer</option>
-                </select>
-                <div id="searchResults"></div>
-            `;
-            document.getElementById('searchBox').addEventListener('keyup', searchHandler);
         }
 
-        function searchHandler(e) {
-            var query = e.target.value.toLowerCase();
-            var results = markers.filter(m => m.name.toLowerCase().includes(query));
-            var resultsDiv = document.getElementById('searchResults');
-            if (query && results.length > 0) {
-                resultsDiv.style.display = 'block';
-                resultsDiv.innerHTML = results.map(r => `<div class="search-item" onclick="map.setView([${r.lat}, ${r.lon}], 15);">${r.name} (${r.category})</div>`).join('');
-            } else {
-                resultsDiv.style.display = 'none';
-            }
-        }
-
+        // Report Generation
         function startReportGeneration() {
-            var ws = XLSX.utils.json_to_sheet(markers.map(m => ({
-                Name: m.name,
-                Latitude: m.lat,
-                Longitude: m.lon,
-                Category: m.category,
-                ...m.attributes
-            })));
-            var wb = XLSX.utils.book_new();
+            const features = vectorLayer.getSource().getFeatures();
+            const data = features.map(f => ({
+                Name: f.get('name'),
+                Latitude: ol.proj.toLonLat(f.getGeometry().getCoordinates())[1],
+                Longitude: ol.proj.toLonLat(f.getGeometry().getCoordinates())[0],
+                Category: f.get('category'),
+                ...f.get('attributes')
+            }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Assets");
             XLSX.writeFile(wb, "Electrical_Infrastructure_Report.xlsx");
         }
-
-        document.getElementById("searchBox").addEventListener("keyup", searchHandler);
     </script>
 </body>
 </html>
