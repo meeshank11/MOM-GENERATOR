@@ -6,7 +6,9 @@
     <title>Interactive Asset Map</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Custom CSS for styling -->
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom CSS -->
     <style>
         body {
             margin: 0;
@@ -16,7 +18,7 @@
             height: 100vh;
         }
         #map {
-            height: 70vh;
+            height: 60vh;
             width: 100%;
         }
         #dashboard {
@@ -24,6 +26,8 @@
             background-color: #f4f4f4;
             border-bottom: 1px solid #ccc;
             text-align: center;
+            height: 30vh;
+            overflow-y: auto;
         }
         #controls {
             padding: 10px;
@@ -37,18 +41,33 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            margin: 5px;
         }
         button:hover {
             background-color: #005bb5;
         }
-        input[type="text"] {
+        input, select {
             padding: 6px;
-            width: 200px;
+            margin: 5px;
+        }
+        #asset-form {
+            display: none;
+            position: absolute;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        canvas {
+            max-width: 300px;
+            display: inline-block;
+            margin: 10px;
         }
         @media (max-width: 600px) {
-            #map { height: 60vh; }
-            #dashboard { font-size: 14px; }
-            input[type="text"] { width: 150px; }
+            #map { height: 50vh; }
+            #dashboard { height: 40vh; font-size: 14px; }
+            canvas { max-width: 200px; }
         }
     </style>
 </head>
@@ -56,17 +75,34 @@
     <!-- Dashboard -->
     <div id="dashboard">
         <h2>Asset Dashboard</h2>
-        <p>Total DTs: <span id="dt-count">0</span> | Total RMUs: <span id="rmu-count">0</span> | Total Poles: <span id="pole-count">0</span></p>
+        <canvas id="pieChart"></canvas>
+        <canvas id="barChart"></canvas>
     </div>
 
     <!-- Controls -->
     <div id="controls">
-        <input type="text" id="search" placeholder="Search assets...">
+        <button onclick="locateMe()">Locate Me</button>
         <button onclick="exportToExcel()">Export to Excel</button>
     </div>
 
     <!-- Map Container -->
     <div id="map"></div>
+
+    <!-- Asset Form -->
+    <div id="asset-form">
+        <h3>Add Asset</h3>
+        <select id="asset-type">
+            <option value="dt">Distribution Transformer</option>
+            <option value="rmu">RMU</option>
+            <option value="pole">Pole</option>
+        </select><br>
+        <input type="text" id="attr1" placeholder="Attribute 1"><br>
+        <input type="text" id="attr2" placeholder="Attribute 2"><br>
+        <input type="text" id="attr3" placeholder="Attribute 3"><br>
+        <input type="text" id="attr4" placeholder="Attribute 4"><br>
+        <button onclick="addAsset()">Add</button>
+        <button onclick="document.getElementById('asset-form').style.display='none'">Cancel</button>
+    </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -74,29 +110,20 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
         // Initialize the map with Google Maps as the base layer
-        const map = L.map('map').setView([51.505, -0.09], 13); // Default center (London)
+        const map = L.map('map').setView([51.505, -0.09], 13);
 
         // Google Maps Tile Layer
         L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
             maxZoom: 20,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-            attribution: 'Map data &copy; Google'
+            attribution: 'Map data © Google'
         }).addTo(map);
 
-        // Asset Data (Example)
+        // Asset Data
         const assets = {
-            distributionTransformers: [
-                { lat: 51.5, lng: -0.09, rating: "500kVA", connectedRMU: "RMU1", substation: "Sub1", make: "ABB", serial: "DT123" },
-                { lat: 51.51, lng: -0.08, rating: "750kVA", connectedRMU: "RMU2", substation: "Sub2", make: "Siemens", serial: "DT456" }
-            ],
-            rmus: [
-                { lat: 51.505, lng: -0.095, name: "RMU1", serial: "RMU123", substation: "Sub1" },
-                { lat: 51.515, lng: -0.085, name: "RMU2", serial: "RMU456", substation: "Sub2" }
-            ],
-            poles: [
-                { lat: 51.502, lng: -0.087, number: "P001", connectedDT: "DT123", connectedFP: "FP1" },
-                { lat: 51.508, lng: -0.092, number: "P002", connectedDT: "DT456", connectedFP: "FP2" }
-            ]
+            distributionTransformers: [],
+            rmus: [],
+            poles: []
         };
 
         // Layer Groups
@@ -104,24 +131,92 @@
         const rmuLayer = L.layerGroup().addTo(map);
         const poleLayer = L.layerGroup().addTo(map);
 
-        // Add Markers to Map
-        assets.distributionTransformers.forEach(dt => {
-            L.marker([dt.lat, dt.lng], { icon: L.divIcon({ className: 'dt-icon', html: '<div style="color:red;">DT</div>' }) })
-                .bindPopup(`<b>Distribution Transformer</b><br>Rating: ${dt.rating}<br>RMU: ${dt.connectedRMU}<br>Substation: ${dt.substation}<br>Make: ${dt.make}<br>Serial: ${dt.serial}`)
-                .addTo(dtLayer);
+        let clickedLatLng = null;
+
+        // Add Marker on Map Click
+        map.on('click', (e) => {
+            clickedLatLng = e.latlng;
+            const form = document.getElementById('asset-form');
+            form.style.display = 'block';
+            form.style.left = `${e.containerPoint.x}px`;
+            form.style.top = `${e.containerPoint.y}px`;
+            updateFormFields();
         });
 
-        assets.rmus.forEach(rmu => {
-            L.marker([rmu.lat, rmu.lng], { icon: L.divIcon({ className: 'rmu-icon', html: '<div style="color:blue;">RMU</div>' }) })
-                .bindPopup(`<b>RMU</b><br>Name: ${rmu.name}<br>Serial: ${rmu.serial}<br>Substation: ${rmu.substation}`)
-                .addTo(rmuLayer);
-        });
+        // Update form fields based on asset type
+        function updateFormFields() {
+            const type = document.getElementById('asset-type').value;
+            const attr1 = document.getElementById('attr1');
+            const attr2 = document.getElementById('attr2');
+            const attr3 = document.getElementById('attr3');
+            const attr4 = document.getElementById('attr4');
+            if (type === 'dt') {
+                attr1.placeholder = 'Rating (e.g., 500kVA)';
+                attr2.placeholder = 'Connected RMU';
+                attr3.placeholder = 'Substation';
+                attr4.placeholder = 'Serial Number';
+            } else if (type === 'rmu') {
+                attr1.placeholder = 'RMU Name';
+                attr2.placeholder = 'Serial Number';
+                attr3.placeholder = 'Substation';
+                attr4.placeholder = '';
+                attr4.style.display = 'none';
+            } else {
+                attr1.placeholder = 'Pole Number';
+                attr2.placeholder = 'Connected DT';
+                attr3.placeholder = 'Connected FP';
+                attr4.placeholder = '';
+                attr4.style.display = 'none';
+            }
+        }
 
-        assets.poles.forEach(pole => {
-            L.marker([pole.lat, pole.lng], { icon: L.divIcon({ className: 'pole-icon', html: '<div style="color:green;">P</div>' }) })
-                .bindPopup(`<b>Pole</b><br>Number: ${pole.number}<br>Connected DT: ${pole.connectedDT}<br>Connected FP: ${pole.connectedFP}`)
-                .addTo(poleLayer);
-        });
+        document.getElementById('asset-type').addEventListener('change', updateFormFields);
+
+        // Add Asset Function
+        function addAsset() {
+            const type = document.getElementById('asset-type').value;
+            const attr1 = document.getElementById('attr1').value;
+            const attr2 = document.getElementById('attr2').value;
+            const attr3 = document.getElementById('attr3').value;
+            const attr4 = document.getElementById('attr4').value;
+
+            if (type === 'dt') {
+                const dt = { lat: clickedLatLng.lat, lng: clickedLatLng.lng, rating: attr1, connectedRMU: attr2, substation: attr3, serial: attr4 };
+                assets.distributionTransformers.push(dt);
+                L.marker([dt.lat, dt.lng], { icon: L.divIcon({ html: '<div style="color:red;">DT</div>' }) })
+                    .bindPopup(`<b>Distribution Transformer</b><br>Rating: ${dt.rating}<br>RMU: ${dt.connectedRMU}<br>Substation: ${dt.substation}<br>Serial: ${dt.serial}`)
+                    .addTo(dtLayer);
+            } else if (type === 'rmu') {
+                const rmu = { lat: clickedLatLng.lat, lng: clickedLatLng.lng, name: attr1, serial: attr2, substation: attr3 };
+                assets.rmus.push(rmu);
+                L.marker([rmu.lat, rmu.lng], { icon: L.divIcon({ html: '<div style="color:blue;">RMU</div>' }) })
+                    .bindPopup(`<b>RMU</b><br>Name: ${rmu.name}<br>Serial: ${rmu.serial}<br>Substation: ${rmu.substation}`)
+                    .addTo(rmuLayer);
+            } else {
+                const pole = { lat: clickedLatLng.lat, lng: clickedLatLng.lng, number: attr1, connectedDT: attr2, connectedFP: attr3 };
+                assets.poles.push(pole);
+                L.marker([pole.lat, pole.lng], { icon: L.divIcon({ html: '<div style="color:green;">P</div>' }) })
+                    .bindPopup(`<b>Pole</b><br>Number: ${pole.number}<br>Connected DT: ${pole.connectedDT}<br>Connected FP: ${pole.connectedFP}`)
+                    .addTo(poleLayer);
+            }
+
+            document.getElementById('asset-form').style.display = 'none';
+            updateCharts();
+        }
+
+        // Locate Me Function
+        function locateMe() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    map.setView([lat, lng], 15);
+                    L.marker([lat, lng]).addTo(map).bindPopup("You are here!").openPopup();
+                }, () => alert("Unable to retrieve location."));
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
 
         // Layer Control
         const overlayMaps = {
@@ -131,18 +226,42 @@
         };
         L.control.layers(null, overlayMaps).addTo(map);
 
-        // Update Dashboard
-        document.getElementById('dt-count').textContent = assets.distributionTransformers.length;
-        document.getElementById('rmu-count').textContent = assets.rmus.length;
-        document.getElementById('pole-count').textContent = assets.poles.length;
+        // Charts
+        function updateCharts() {
+            const dtCount = assets.distributionTransformers.length;
+            const rmuCount = assets.rmus.length;
+            const poleCount = assets.poles.length;
 
-        // Search Functionality
-        document.getElementById('search').addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            dtLayer.eachLayer(layer => layer.getPopup().getContent().toLowerCase().includes(query) ? layer.addTo(map) : map.removeLayer(layer));
-            rmuLayer.eachLayer(layer => layer.getPopup().getContent().toLowerCase().includes(query) ? layer.addTo(map) : map.removeLayer(layer));
-            poleLayer.eachLayer(layer => layer.getPopup().getContent().toLowerCase().includes(query) ? layer.addTo(map) : map.removeLayer(layer));
-        });
+            // Pie Chart
+            new Chart(document.getElementById('pieChart'), {
+                type: 'pie',
+                data: {
+                    labels: ['DTs', 'RMUs', 'Poles'],
+                    datasets: [{
+                        data: [dtCount, rmuCount, poleCount],
+                        backgroundColor: ['#ff6384', '#36a2eb', '#4bc0c0']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // Bar Chart
+            new Chart(document.getElementById('barChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['DTs', 'RMUs', 'Poles'],
+                    datasets: [{
+                        label: 'Asset Count',
+                        data: [dtCount, rmuCount, poleCount],
+                        backgroundColor: ['#ff6384', '#36a2eb', '#4bc0c0']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        // Initial Chart Update
+        updateCharts();
 
         // Export to Excel
         function exportToExcel() {
