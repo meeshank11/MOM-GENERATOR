@@ -374,4 +374,83 @@
             var fiveYearsAgo = new Date(currentDate.setFullYear(currentDate.getFullYear() - 5));
             var oldDTs = markers.filter(m => m.category === 'dt' && 
                 new Date(m.attributes.installDate) <= fiveYearsAgo);
-            report += `DTs older than 5 years: ${oldDTs.length
+            report += `DTs older than 5 years: ${oldDTs.length}\n`;
+
+            alert(report);
+            console.log(report); // For debugging or future export
+        }
+
+        function updateLocation(position) {
+            var lat = position.coords.latitude;
+            var lng = position.coords.longitude;
+
+            userLocation = [lat, lng];
+
+            if (userMarker) {
+                userMarker.setLatLng([lat, lng]);
+            } else {
+                userMarker = L.marker([lat, lng], { icon: icons.location }).addTo(map)
+                    .bindPopup("<b style='color: #007bff;'>You are here</b>");
+            }
+
+            map.setView([lat, lng], 14);
+            updatePopups();
+            userMarker.openPopup();
+        }
+
+        function errorLocation(error) {
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    alert("Location access denied. Please allow location permissions to use this feature.");
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    alert("Location information is unavailable.");
+                    break;
+                case error.TIMEOUT:
+                    alert("The request to get your location timed out.");
+                    break;
+                default:
+                    alert("An unknown error occurred while fetching your location.");
+                    break;
+            }
+        }
+
+        function locateUser() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(updateLocation, errorLocation, {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                });
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
+
+        document.getElementById("searchBox").addEventListener("keyup", function () {
+            var searchText = this.value.toLowerCase();
+            var resultsDiv = document.getElementById("searchResults");
+            var selectedCategory = document.getElementById('filterSelect').value;
+            resultsDiv.innerHTML = "";
+            resultsDiv.style.display = "none";
+
+            if (searchText.length > 0) {
+                markers.forEach(function (item) {
+                    if (item.name.toLowerCase().includes(searchText) &&
+                        (selectedCategory === 'all' || item.category === selectedCategory)) {
+                        var div = document.createElement("div");
+                        div.className = "search-item";
+                        div.textContent = item.name;
+                        div.onclick = function () {
+                            map.setView(item.marker.getLatLng(), 15);
+                            item.marker.openPopup();
+                        };
+                        resultsDiv.appendChild(div);
+                        resultsDiv.style.display = "block";
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
