@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Recorder & MOM Generator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #74ebd5, #acb6e5);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            width: 400px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        .button {
+            padding: 12px 25px;
+            margin: 10px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.3s;
+        }
+        .button:hover {
+            transform: scale(1.05);
+        }
+        #recordBtn {
+            background: #ff6b6b;
+            color: white;
+        }
+        #stopBtn {
+            background: #4ecdc4;
+            color: white;
+            display: none;
+        }
+        #generateBtn {
+            background: #45b7d1;
+            color: white;
+            display: none;
+        }
+        .share-options {
+            margin-top: 20px;
+            display: none;
+        }
+        .share-btn {
+            background: #f7d794;
+            color: #333;
+            margin: 5px;
+            padding: 10px 20px;
+        }
+        .status {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Meeting Recorder</h1>
+        <button id="recordBtn" class="button">Record Meeting</button>
+        <button id="stopBtn" class="button">Stop Recording</button>
+        <button id="generateBtn" class="button">Generate MOM</button>
+        <div id="shareOptions" class="share-options">
+            <p>Share Minutes of Meeting:</p>
+            <button class="button share-btn" onclick="share('outlook')">Outlook</button>
+            <button class="button share-btn" onclick="share('email')">Email</button>
+            <button class="button share-btn" onclick="share('whatsapp')">WhatsApp</button>
+        </div>
+        <div id="status" class="status">Ready to record</div>
+    </div>
+
+    <script>
+        const recordBtn = document.getElementById('recordBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const generateBtn = document.getElementById('generateBtn');
+        const shareOptions = document.getElementById('shareOptions');
+        const status = document.getElementById('status');
+
+        recordBtn.addEventListener('click', () => {
+            // Placeholder for starting recording logic
+            recordBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            status.textContent = 'Recording in progress...';
+            // Here you would integrate WebRTC or similar for actual recording
+        });
+
+        stopBtn.addEventListener('click', () => {
+            // Placeholder for stopping recording logic
+            stopBtn.style.display = 'none';
+            generateBtn.style.display = 'inline-block';
+            status.textContent = 'Recording stopped. Generate MOM?';
+        });
+
+        generateBtn.addEventListener('click', () => {
+            // Placeholder for MOM generation logic
+            generateBtn.style.display = 'none';
+            shareOptions.style.display = 'block';
+            status.textContent = 'MOM generated successfully!';
+            // Here you would integrate an AI/NLP service to generate MOM
+        });
+
+        function share(method) {
+            // Placeholder for sharing logic
+            let message = '';
+            switch(method) {
+                case 'outlook':
+                    message = 'Sharing via Outlook...';
+                    break;
+                case 'email':
+                    message = 'Sharing via Email...';
+                    break;
+                case 'whatsapp':
+                    message = 'Sharing via WhatsApp...';
+                    break;
+            }
+            status.textContent = message;
+            // Here you would integrate actual sharing functionality
+        }
+    </script>
+</body>
+</html>
