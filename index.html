@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Asset Map</title>
+    <title>Asset Map App</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <!-- Chart.js -->
@@ -12,107 +12,171 @@
     <style>
         body {
             margin: 0;
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background: #f0f2f5;
             display: flex;
             flex-direction: column;
-            height: 100vh;
+        }
+        #header {
+            background: #1a73e8;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #header h1 {
+            margin: 0;
+            font-size: 20px;
+        }
+        #toggle-sidebar {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        #container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        #sidebar {
+            width: 300px;
+            background: white;
+            padding: 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            overflow-y: auto;
+            position: absolute;
+            height: calc(100vh - 60px);
+            z-index: 1000;
+        }
+        #sidebar.hidden {
+            transform: translateX(-100%);
         }
         #map {
-            height: 60vh;
-            width: 100%;
+            flex: 1;
+            height: calc(100vh - 60px);
         }
         #dashboard {
-            padding: 10px;
-            background-color: #f4f4f4;
-            border-bottom: 1px solid #ccc;
-            text-align: center;
-            height: 30vh;
-            overflow-y: auto;
+            margin-top: 20px;
         }
-        #controls {
-            padding: 10px;
-            background-color: #fff;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        #dashboard h2 {
+            font-size: 18px;
+            color: #333;
         }
-        button {
-            padding: 8px 16px;
-            background-color: #0078d7;
+        canvas {
+            max-width: 100%;
+            margin: 10px 0;
+        }
+        .button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background: #1a73e8;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             cursor: pointer;
-            margin: 5px;
+            font-size: 16px;
+            transition: background 0.2s;
         }
-        button:hover {
-            background-color: #005bb5;
-        }
-        input, select {
-            padding: 6px;
-            margin: 5px;
+        .button:hover {
+            background: #1557b0;
         }
         #asset-form {
             display: none;
             position: absolute;
             background: white;
-            padding: 10px;
-            border: 1px solid #ccc;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            z-index: 1000;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 1001;
+            width: 250px;
         }
-        canvas {
-            max-width: 300px;
-            display: inline-block;
-            margin: 10px;
+        #asset-form h3 {
+            margin: 0 0 10px;
+            font-size: 16px;
         }
-        @media (max-width: 600px) {
-            #map { height: 50vh; }
-            #dashboard { height: 40vh; font-size: 14px; }
-            canvas { max-width: 200px; }
+        #asset-form select, #asset-form input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        #asset-form .button {
+            margin: 10px 0 0;
+        }
+        @media (max-width: 768px) {
+            #sidebar {
+                width: 100%;
+                max-width: 300px;
+            }
+            #map { height: calc(100vh - 60px); }
+            #header h1 { font-size: 18px; }
+            .button { font-size: 14px; }
+            #asset-form { width: 90%; }
         }
     </style>
 </head>
 <body>
-    <!-- Dashboard -->
-    <div id="dashboard">
-        <h2>Asset Dashboard</h2>
-        <canvas id="pieChart"></canvas>
-        <canvas id="barChart"></canvas>
+    <!-- Header -->
+    <div id="header">
+        <h1>Asset Map App</h1>
+        <button id="toggle-sidebar">☰</button>
     </div>
 
-    <!-- Controls -->
-    <div id="controls">
-        <button onclick="locateMe()">Locate Me</button>
-        <button onclick="exportToExcel()">Export to Excel</button>
-    </div>
+    <!-- Container -->
+    <div id="container">
+        <!-- Sidebar -->
+        <div id="sidebar">
+            <button class="button" onclick="locateMe()">Locate Me</button>
+            <button class="button" onclick="exportToExcel()">Export to Excel</button>
+            <button class="button" onclick="exportToShp()">Export to Shapefile</button>
+            <button class="button" onclick="exportToKml()">Export to KML</button>
+            <div id="dashboard">
+                <h2>Dashboard</h2>
+                <canvas id="pieChart"></canvas>
+                <canvas id="barChart"></canvas>
+            </div>
+        </div>
 
-    <!-- Map Container -->
-    <div id="map"></div>
+        <!-- Map -->
+        <div id="map"></div>
 
-    <!-- Asset Form -->
-    <div id="asset-form">
-        <h3>Add Asset</h3>
-        <select id="asset-type">
-            <option value="dt">Distribution Transformer</option>
-            <option value="rmu">RMU</option>
-            <option value="pole">Pole</option>
-        </select><br>
-        <input type="text" id="attr1" placeholder="Attribute 1"><br>
-        <input type="text" id="attr2" placeholder="Attribute 2"><br>
-        <input type="text" id="attr3" placeholder="Attribute 3"><br>
-        <input type="text" id="attr4" placeholder="Attribute 4"><br>
-        <button onclick="addAsset()">Add</button>
-        <button onclick="document.getElementById('asset-form').style.display='none'">Cancel</button>
+        <!-- Asset Form -->
+        <div id="asset-form">
+            <h3>Add Asset</h3>
+            <select id="asset-type">
+                <option value="dt">Distribution Transformer</option>
+                <option value="rmu">RMU</option>
+                <option value="pole">Pole</option>
+            </select>
+            <input type="text" id="attr1" placeholder="Attribute 1">
+            <input type="text" id="attr2" placeholder="Attribute 2">
+            <input type="text" id="attr3" placeholder="Attribute 3">
+            <input type="text" id="attr4" placeholder="Attribute 4">
+            <button class="button" onclick="addAsset()">Add</button>
+            <button class="button" onclick="document.getElementById('asset-form').style.display='none'">Cancel</button>
+        </div>
     </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- SheetJS for Excel Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- shp-write for Shapefile Export (Host locally) -->
+    <script src="path/to/shp-write.js"></script> <!-- Replace with actual path -->
     <script>
-        // Initialize the map with Google Maps as the base layer
+        // Initialize the map
         const map = L.map('map').setView([51.505, -0.09], 13);
-
-        // Google Maps Tile Layer
         L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
             maxZoom: 20,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
@@ -120,30 +184,29 @@
         }).addTo(map);
 
         // Asset Data
-        const assets = {
-            distributionTransformers: [],
-            rmus: [],
-            poles: []
-        };
-
-        // Layer Groups
+        const assets = { distributionTransformers: [], rmus: [], poles: [] };
         const dtLayer = L.layerGroup().addTo(map);
         const rmuLayer = L.layerGroup().addTo(map);
         const poleLayer = L.layerGroup().addTo(map);
-
         let clickedLatLng = null;
 
-        // Add Marker on Map Click
+        // Sidebar Toggle
+        const sidebar = document.getElementById('sidebar');
+        document.getElementById('toggle-sidebar').addEventListener('click', () => {
+            sidebar.classList.toggle('hidden');
+        });
+
+        // Map Click to Add Asset
         map.on('click', (e) => {
             clickedLatLng = e.latlng;
             const form = document.getElementById('asset-form');
             form.style.display = 'block';
-            form.style.left = `${e.containerPoint.x}px`;
-            form.style.top = `${e.containerPoint.y}px`;
+            form.style.left = `${Math.min(e.containerPoint.x, window.innerWidth - 260)}px`;
+            form.style.top = `${Math.min(e.containerPoint.y, window.innerHeight - 300)}px`;
             updateFormFields();
         });
 
-        // Update form fields based on asset type
+        // Update Form Fields
         function updateFormFields() {
             const type = document.getElementById('asset-type').value;
             const attr1 = document.getElementById('attr1');
@@ -155,6 +218,7 @@
                 attr2.placeholder = 'Connected RMU';
                 attr3.placeholder = 'Substation';
                 attr4.placeholder = 'Serial Number';
+                attr4.style.display = 'block';
             } else if (type === 'rmu') {
                 attr1.placeholder = 'RMU Name';
                 attr2.placeholder = 'Serial Number';
@@ -172,7 +236,7 @@
 
         document.getElementById('asset-type').addEventListener('change', updateFormFields);
 
-        // Add Asset Function
+        // Add Asset
         function addAsset() {
             const type = document.getElementById('asset-type').value;
             const attr1 = document.getElementById('attr1').value;
@@ -204,7 +268,7 @@
             updateCharts();
         }
 
-        // Locate Me Function
+        // Locate Me
         function locateMe() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition((position) => {
@@ -232,38 +296,28 @@
             const rmuCount = assets.rmus.length;
             const poleCount = assets.poles.length;
 
-            // Pie Chart
             new Chart(document.getElementById('pieChart'), {
                 type: 'pie',
                 data: {
                     labels: ['DTs', 'RMUs', 'Poles'],
-                    datasets: [{
-                        data: [dtCount, rmuCount, poleCount],
-                        backgroundColor: ['#ff6384', '#36a2eb', '#4bc0c0']
-                    }]
+                    datasets: [{ data: [dtCount, rmuCount, poleCount], backgroundColor: ['#ff6384', '#36a2eb', '#4bc0c0'] }]
                 },
                 options: { responsive: true, maintainAspectRatio: false }
             });
 
-            // Bar Chart
             new Chart(document.getElementById('barChart'), {
                 type: 'bar',
                 data: {
                     labels: ['DTs', 'RMUs', 'Poles'],
-                    datasets: [{
-                        label: 'Asset Count',
-                        data: [dtCount, rmuCount, poleCount],
-                        backgroundColor: ['#ff6384', '#36a2eb', '#4bc0c0']
-                    }]
+                    datasets: [{ label: 'Asset Count', data: [dtCount, rmuCount, poleCount], backgroundColor: ['#ff6384', '#36a2eb', '#4bc0c0'] }]
                 },
                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
             });
         }
 
-        // Initial Chart Update
         updateCharts();
 
-        // Export to Excel
+        // Export Functions
         function exportToExcel() {
             const wb = XLSX.utils.book_new();
             const ws1 = XLSX.utils.json_to_sheet(assets.distributionTransformers);
@@ -273,6 +327,79 @@
             XLSX.utils.book_append_sheet(wb, ws2, "RMUs");
             XLSX.utils.book_append_sheet(wb, ws3, "Poles");
             XLSX.writeFile(wb, "AssetMapData.xlsx");
+        }
+
+        function exportToShp() {
+            const features = [
+                ...assets.distributionTransformers.map(dt => ({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [dt.lng, dt.lat] },
+                    properties: { type: 'DT', rating: dt.rating, connectedRMU: dt.connectedRMU, substation: dt.substation, serial: dt.serial }
+                })),
+                ...assets.rmus.map(rmu => ({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [rmu.lng, rmu.lat] },
+                    properties: { type: 'RMU', name: rmu.name, serial: rmu.serial, substation: rmu.substation }
+                })),
+                ...assets.poles.map(pole => ({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [pole.lng, pole.lat] },
+                    properties: { type: 'Pole', number: pole.number, connectedDT: pole.connectedDT, connectedFP: pole.connectedFP }
+                }))
+            ];
+
+            shpwrite.download({
+                type: 'FeatureCollection',
+                features: features
+            }, { folder: 'AssetMapData', types: { point: 'Assets' } });
+        }
+
+        function exportToKml() {
+            let kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+    <name>Asset Map Data</name>`;
+            assets.distributionTransformers.forEach(dt => {
+                kml += `
+    <Placemark>
+        <name>DT_${dt.serial}</name>
+        <description><![CDATA[Rating: ${dt.rating}<br>Connected RMU: ${dt.connectedRMU}<br>Substation: ${dt.substation}<br>Serial: ${dt.serial}]]></description>
+        <Point>
+            <coordinates>${dt.lng},${dt.lat}</coordinates>
+        </Point>
+    </Placemark>`;
+            });
+            assets.rmus.forEach(rmu => {
+                kml += `
+    <Placemark>
+        <name>RMU_${rmu.serial}</name>
+        <description><![CDATA[Name: ${rmu.name}<br>Serial: ${rmu.serial}<br>Substation: ${rmu.substation}]]></description>
+        <Point>
+            <coordinates>${rmu.lng},${rmu.lat}</coordinates>
+        </Point>
+    </Placemark>`;
+            });
+            assets.poles.forEach(pole => {
+                kml += `
+    <Placemark>
+        <name>Pole_${pole.number}</name>
+        <description><![CDATA[Number: ${pole.number}<br>Connected DT: ${pole.connectedDT}<br>Connected FP: ${pole.connectedFP}]]></description>
+        <Point>
+            <coordinates>${pole.lng},${pole.lat}</coordinates>
+        </Point>
+    </Placemark>`;
+            });
+            kml += `
+</Document>
+</kml>`;
+
+            const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'AssetMapData.kml';
+            a.click();
+            URL.revokeObjectURL(url);
         }
     </script>
 </body>
