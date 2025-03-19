@@ -2,405 +2,376 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asset Map App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Electrical Infrastructure Map</title>
+
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Custom CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+
     <style>
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', Arial, sans-serif;
-            height: 100vh;
-            overflow: hidden;
-            background: #f0f2f5;
-            display: flex;
-            flex-direction: column;
-        }
-        #header {
-            background: #1a73e8;
-            color: white;
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        #header h1 {
-            margin: 0;
-            font-size: 20px;
-        }
-        #toggle-sidebar {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-        }
-        #container {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
-        #sidebar {
-            width: 300px;
-            background: white;
-            padding: 20px;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
-            overflow-y: auto;
-            position: absolute;
-            height: calc(100vh - 60px);
-            z-index: 1000;
-        }
-        #sidebar.hidden {
-            transform: translateX(-100%);
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body, html { width: 100%; height: 100%; font-family: 'Poppins', sans-serif; background: #f0f2f5; }
+       
+        h2 {
+            text-align: center; padding: 15px; font-size: 1.5rem; font-weight: 600;
+            background: linear-gradient(90deg, #007bff, #00c4ff); color: white;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
         }
         #map {
-            flex: 1;
-            height: calc(100vh - 60px);
+            height: calc(100vh - 200px); width: 100%; border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); margin-top: 10px;
         }
-        #dashboard {
-            margin-top: 20px;
+        #searchContainer {
+            position: relative; text-align: center; margin: 15px auto; width: 90%; max-width: 700px;
+            z-index: 1000; display: flex; justify-content: center; gap: 10px;
         }
-        #dashboard h2 {
-            font-size: 18px;
-            color: #333;
+        #searchBox, #assetType, #connectedSubstation {
+            padding: 12px; border: none; border-radius: 25px;
+            font-size: 1rem; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.9); cursor: pointer;
         }
-        canvas {
-            max-width: 100%;
-            margin: 10px 0;
+        #searchBox:focus, #assetType:focus, #connectedSubstation:focus { 
+            outline: none; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); 
         }
-        .button {
-            display: block;
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            background: #1a73e8;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background 0.2s;
+        #searchResults {
+            position: absolute; width: 70%; max-height: 200px; overflow-y: auto;
+            border-radius: 10px; background: white; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            display: none; z-index: 1001; margin-top: 45px; left: 50%; transform: translateX(-50%);
         }
-        .button:hover {
-            background: #1557b0;
+        .search-item {
+            padding: 10px 15px; cursor: pointer; text-align: left; font-size: 0.9rem;
+            border-bottom: 1px solid #eee; transition: background 0.2s ease;
         }
-        #asset-form {
-            display: none;
-            position: absolute;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            z-index: 1001;
-            width: 250px;
+        .search-item:last-child { border-bottom: none; }
+        .search-item:hover { background: #e9ecef; }
+        #buttonContainer {
+            text-align: center; margin: 10px auto; padding: 10px;
+            height: 60px;
         }
-        #asset-form h3 {
-            margin: 0 0 10px;
-            font-size: 16px;
+        #locateButton, #toggleMapButton, #addAssetButton, #reportButton {
+            padding: 10px 20px; background: linear-gradient(90deg, #28a745, #34c759);
+            color: white; border: none; border-radius: 25px; cursor: pointer;
+            font-size: 1rem; font-weight: 600; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease; margin: 0 10px; display: inline-block;
         }
-        #asset-form select, #asset-form input {
-            width: 100%;
-            padding: 8px;
-            margin: 5px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
+        #locateButton:hover, #toggleMapButton:hover, #addAssetButton:hover, #reportButton:hover {
+            transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
         }
-        #asset-form .button {
-            margin: 10px 0 0;
+        .blinking-substation {
+            animation: blink 1s infinite;
         }
-        @media (max-width: 768px) {
-            #sidebar {
-                width: 100%;
-                max-width: 300px;
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        @media (max-width: 600px) {
+            h2 { font-size: 1.2rem; padding: 10px; }
+            #searchContainer { width: 85%; flex-direction: column; gap: 5px; }
+            #searchBox, #assetType, #connectedSubstation { 
+                width: 100%; font-size: 0.9rem; padding: 10px; 
             }
-            #map { height: calc(100vh - 60px); }
-            #header h1 { font-size: 18px; }
-            .button { font-size: 14px; }
-            #asset-form { width: 90%; }
+            #searchResults { width: 100%; margin-top: 70px; }
+            #locateButton, #toggleMapButton, #addAssetButton, #reportButton { 
+                font-size: 0.85rem; padding: 8px 15px; margin: 0 5px; 
+            }
+            #map { height: calc(100vh - 180px); }
+            #buttonContainer { height: 50px; }
+            .search-item { font-size: 0.85rem; padding: 8px 12px; }
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <div id="header">
-        <h1>Asset Map App</h1>
-        <button id="toggle-sidebar">☰</button>
+    <h2>Electrical Infrastructure Map</h2>
+   
+    <div id="searchContainer">
+        <input type="text" id="searchBox" placeholder="Search for infrastructure...">
+        <select id="filterSelect" onchange="filterMarkers()">
+            <option value="all">All Categories</option>
+            <option value="rmu">RMU</option>
+            <option value="dt">DT</option>
+            <option value="fp">FP</option>
+            <option value="poles">Poles</option>
+            <option value="abs">ABS</option>
+            <option value="lbs">LBS</option>
+            <option value="earthpit">Earthpit</option>
+            <option value="cabledepth">Cable Depth</option>
+            <option value="sourcesubstation">Source Sub-station</option>
+            <option value="substation">Sub-station</option>
+            <option value="cablejoint">Cable Joint</option>
+            <option value="routemarker">Route Marker</option>
+            <option value="cpss">CPSS</option>
+            <option value="db">DB</option>
+            <option value="132kvtower">132kV Tower</option>
+            <option value="lilo">LILO</option>
+            <option value="htmeteringunit">HT Metering Unit</option>
+            <option value="meter">Meter</option>
+            <option value="hdd">HDD</option>
+        </select>
+        <div id="searchResults"></div>
     </div>
-
-    <!-- Container -->
-    <div id="container">
-        <!-- Sidebar -->
-        <div id="sidebar">
-            <button class="button" onclick="locateMe()">Locate Me</button>
-            <button class="button" onclick="exportToExcel()">Export to Excel</button>
-            <button class="button" onclick="exportToShp()">Export to Shapefile</button>
-            <button class="button" onclick="exportToKml()">Export to KML</button>
-            <div id="dashboard">
-                <h2>Dashboard</h2>
-                <canvas id="pieChart"></canvas>
-                <canvas id="barChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Map -->
-        <div id="map"></div>
-
-        <!-- Asset Form -->
-        <div id="asset-form">
-            <h3>Add Asset</h3>
-            <select id="asset-type">
-                <option value="dt">Distribution Transformer</option>
-                <option value="rmu">RMU</option>
-                <option value="pole">Pole</option>
-            </select>
-            <input type="text" id="attr1" placeholder="Attribute 1">
-            <input type="text" id="attr2" placeholder="Attribute 2">
-            <input type="text" id="attr3" placeholder="Attribute 3">
-            <input type="text" id="attr4" placeholder="Attribute 4">
-            <button class="button" onclick="addAsset()">Add</button>
-            <button class="button" onclick="document.getElementById('asset-form').style.display='none'">Cancel</button>
-        </div>
+   
+    <div id="buttonContainer">
+        <button id="locateButton" onclick="locateUser()">Locate Me</button>
+        <button id="toggleMapButton" onclick="toggleBaseMap()">Switch to Map</button>
+        <button id="addAssetButton" onclick="startAddingAsset()">Add Asset</button>
+        <button id="reportButton" onclick="generateReport()">Generate Report</button>
     </div>
+   
+    <div id="map"></div>
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- SheetJS for Excel Export -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- shp-write for Shapefile Export (Host locally) -->
-    <script src="path/to/shp-write.js"></script> <!-- Replace with actual path -->
     <script>
-        // Initialize the map
-        const map = L.map('map').setView([51.505, -0.09], 13);
-        L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-            maxZoom: 20,
-            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-            attribution: 'Map data © Google'
-        }).addTo(map);
+        var map = L.map('map').setView([22.80222549, 86.13745], 13);
+        var addingAsset = false;
 
-        // Asset Data
-        const assets = { distributionTransformers: [], rmus: [], poles: [] };
-        const dtLayer = L.layerGroup().addTo(map);
-        const rmuLayer = L.layerGroup().addTo(map);
-        const poleLayer = L.layerGroup().addTo(map);
-        let clickedLatLng = null;
-
-        // Sidebar Toggle
-        const sidebar = document.getElementById('sidebar');
-        document.getElementById('toggle-sidebar').addEventListener('click', () => {
-            sidebar.classList.toggle('hidden');
+        var satelliteLayer = L.tileLayer('http://www.google.cn/maps/vt?lyrs=s@189&gl=cn&x={x}&y={y}&z={z}', {
+            attribution: '© Google Satellite'
+        });
+        var osmLayer = L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}', {
+            attribution: '© OpenStreetMap contributors'
         });
 
-        // Map Click to Add Asset
-        map.on('click', (e) => {
-            clickedLatLng = e.latlng;
-            const form = document.getElementById('asset-form');
-            form.style.display = 'block';
-            form.style.left = `${Math.min(e.containerPoint.x, window.innerWidth - 260)}px`;
-            form.style.top = `${Math.min(e.containerPoint.y, window.innerHeight - 300)}px`;
-            updateFormFields();
-        });
+        satelliteLayer.addTo(map);
+        var currentLayer = 'satellite';
 
-        // Update Form Fields
-        function updateFormFields() {
-            const type = document.getElementById('asset-type').value;
-            const attr1 = document.getElementById('attr1');
-            const attr2 = document.getElementById('attr2');
-            const attr3 = document.getElementById('attr3');
-            const attr4 = document.getElementById('attr4');
-            if (type === 'dt') {
-                attr1.placeholder = 'Rating (e.g., 500kVA)';
-                attr2.placeholder = 'Connected RMU';
-                attr3.placeholder = 'Substation';
-                attr4.placeholder = 'Serial Number';
-                attr4.style.display = 'block';
-            } else if (type === 'rmu') {
-                attr1.placeholder = 'RMU Name';
-                attr2.placeholder = 'Serial Number';
-                attr3.placeholder = 'Substation';
-                attr4.placeholder = '';
-                attr4.style.display = 'none';
+        function toggleBaseMap() {
+            if (currentLayer === 'satellite') {
+                map.removeLayer(satelliteLayer);
+                osmLayer.addTo(map);
+                currentLayer = 'osm';
+                document.getElementById('toggleMapButton').textContent = 'Switch to Satellite';
             } else {
-                attr1.placeholder = 'Pole Number';
-                attr2.placeholder = 'Connected DT';
-                attr3.placeholder = 'Connected FP';
-                attr4.placeholder = '';
-                attr4.style.display = 'none';
+                map.removeLayer(osmLayer);
+                satelliteLayer.addTo(map);
+                currentLayer = 'satellite';
+                document.getElementById('toggleMapButton').textContent = 'Switch to Map';
             }
         }
 
-        document.getElementById('asset-type').addEventListener('change', updateFormFields);
-
-        // Add Asset
-        function addAsset() {
-            const type = document.getElementById('asset-type').value;
-            const attr1 = document.getElementById('attr1').value;
-            const attr2 = document.getElementById('attr2').value;
-            const attr3 = document.getElementById('attr3').value;
-            const attr4 = document.getElementById('attr4').value;
-
-            if (type === 'dt') {
-                const dt = { lat: clickedLatLng.lat, lng: clickedLatLng.lng, rating: attr1, connectedRMU: attr2, substation: attr3, serial: attr4 };
-                assets.distributionTransformers.push(dt);
-                L.marker([dt.lat, dt.lng], { icon: L.divIcon({ html: '<div style="color:red;">DT</div>' }) })
-                    .bindPopup(`<b>Distribution Transformer</b><br>Rating: ${dt.rating}<br>RMU: ${dt.connectedRMU}<br>Substation: ${dt.substation}<br>Serial: ${dt.serial}`)
-                    .addTo(dtLayer);
-            } else if (type === 'rmu') {
-                const rmu = { lat: clickedLatLng.lat, lng: clickedLatLng.lng, name: attr1, serial: attr2, substation: attr3 };
-                assets.rmus.push(rmu);
-                L.marker([rmu.lat, rmu.lng], { icon: L.divIcon({ html: '<div style="color:blue;">RMU</div>' }) })
-                    .bindPopup(`<b>RMU</b><br>Name: ${rmu.name}<br>Serial: ${rmu.serial}<br>Substation: ${rmu.substation}`)
-                    .addTo(rmuLayer);
-            } else {
-                const pole = { lat: clickedLatLng.lat, lng: clickedLatLng.lng, number: attr1, connectedDT: attr2, connectedFP: attr3 };
-                assets.poles.push(pole);
-                L.marker([pole.lat, pole.lng], { icon: L.divIcon({ html: '<div style="color:green;">P</div>' }) })
-                    .bindPopup(`<b>Pole</b><br>Number: ${pole.number}<br>Connected DT: ${pole.connectedDT}<br>Connected FP: ${pole.connectedFP}`)
-                    .addTo(poleLayer);
-            }
-
-            document.getElementById('asset-form').style.display = 'none';
-            updateCharts();
-        }
-
-        // Locate Me
-        function locateMe() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition((position) => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    map.setView([lat, lng], 15);
-                    L.marker([lat, lng]).addTo(map).bindPopup("You are here!").openPopup();
-                }, () => alert("Unable to retrieve location."));
-            } else {
-                alert("Geolocation is not supported by this browser.");
-            }
-        }
-
-        // Layer Control
-        const overlayMaps = {
-            "Distribution Transformers": dtLayer,
-            "RMUs": rmuLayer,
-            "Poles": poleLayer
+        var icons = {
+            rmu: L.icon({ iconUrl: 'https://img.icons8.com/color/48/electrical.png', iconSize: [20, 20] }),
+            dt: L.icon({ iconUrl: 'https://img.icons8.com/color/48/transformer.png', iconSize: [20, 20] }),
+            fp: L.icon({ iconUrl: 'https://img.icons8.com/color/48/electricity.png', iconSize: [20, 20] }),
+            poles: L.icon({ iconUrl: 'https://img.icons8.com/color/48/power-pole.png', iconSize: [20, 20] }),
+            abs: L.icon({ iconUrl: 'https://img.icons8.com/color/48/switch.png', iconSize: [20, 20] }),
+            lbs: L.icon({ iconUrl: 'https://img.icons8.com/color/48/breaker.png', iconSize: [20, 20] }),
+            earthpit: L.icon({ iconUrl: 'https://img.icons8.com/color/48/ground.png', iconSize: [20, 20] }),
+            cabledepth: L.icon({ iconUrl: 'https://img.icons8.com/color/48/cable.png', iconSize: [20, 20] }),
+            sourcesubstation: L.icon({ iconUrl: 'https://img.icons8.com/color/48/power-plant.png', iconSize: [20, 20] }),
+            substation: L.icon({ 
+                iconUrl: 'https://img.icons8.com/color/48/substation.png', 
+                iconSize: [20, 20],
+                className: 'blinking-substation'
+            }),
+            cablejoint: L.icon({ iconUrl: 'https://img.icons8.com/color/48/joint.png', iconSize: [20, 20] }),
+            routemarker: L.icon({ iconUrl: 'https://img.icons8.com/color/48/marker.png', iconSize: [20, 20] }),
+            cpss: L.icon({ iconUrl: 'https://img.icons8.com/color/48/control-panel.png', iconSize: [20, 20] }),
+            db: L.icon({ iconUrl: 'https://img.icons8.com/color/48/distribution-box.png', iconSize: [20, 20] }),
+            '132kvtower': L.icon({ iconUrl: 'https://img.icons8.com/color/48/transmission-tower.png', iconSize: [20, 20] }),
+            lilo: L.icon({ iconUrl: 'https://img.icons8.com/color/48/loop.png', iconSize: [20, 20] }),
+            htmeteringunit: L.icon({ iconUrl: 'https://img.icons8.com/color/48/meter.png', iconSize: [20, 20] }),
+            meter: L.icon({ iconUrl: 'https://img.icons8.com/color/48/smart-meter.png', iconSize: [20, 20] }),
+            hdd: L.icon({ iconUrl: 'https://img.icons8.com/color/48/hdd.png', iconSize: [20, 20] }),
+            location: L.icon({ iconUrl: 'https://img.icons8.com/color/48/street-view.png', iconSize: [25, 25] })
         };
-        L.control.layers(null, overlayMaps).addTo(map);
 
-        // Charts
-        function updateCharts() {
-            const dtCount = assets.distributionTransformers.length;
-            const rmuCount = assets.rmus.length;
-            const poleCount = assets.poles.length;
+        var locations = [
+            ["RMU-1", 22.7852528, 86.137317, "rmu", { connectedSubstation: "Sub-station-1", installDate: "2010-03-19" }],
+            ["DT-1", 22.7892343, 86.1499, "dt", { connectedSubstation: "Sub-station-1", installDate: "2018-03-19" }],
+            ["FP-1", 22.8038139, 86.106203, "fp", { connectedSubstation: "Sub-station-1", installDate: "2015-03-19" }],
+            ["Pole-1", 22.8201228, 86.086987, "poles", { connectedSubstation: "Sub-station-1", installDate: "2012-03-19" }],
+            ["ABS-1", 22.7970361, 86.121753, "abs", { connectedSubstation: "Sub-station-1", installDate: "2013-03-19" }],
+            ["LBS-1", 22.7970151, 86.129073, "lbs", { connectedSubstation: "Sub-station-1", installDate: "2014-03-19" }],
+            ["Earthpit-1", 22.7999917, 86.135672, "earthpit", { connectedSubstation: "Sub-station-1", installDate: "2011-03-19" }],
+            ["Cable Depth-1", 22.8003222, 86.035714, "cabledepth", { connectedSubstation: "Sub-station-1", installDate: "2016-03-19" }],
+            ["Source SS-1", 22.7230417, 85.956564, "sourcesubstation", { installDate: "2008-03-19" }],
+            ["Sub-station-1", 22.8142021, 86.082526, "substation", { installDate: "2005-03-19" }],
+            ["Cable Joint-1", 22.8151515, 86.081806, "cablejoint", { connectedSubstation: "Sub-station-1", installDate: "2017-03-19" }],
+            ["Route Marker-1", 22.785866, 86.165484, "routemarker", { connectedSubstation: "Sub-station-1", installDate: "2018-03-19" }],
+            ["CPSS-1", 22.8040079, 86.183406, "cpss", { connectedSubstation: "Sub-station-1", installDate: "2019-03-19" }],
+            ["DB-1", 22.7883588, 86.030003, "db", { connectedSubstation: "Sub-station-1", installDate: "2020-03-19" }],
+            ["132kV Tower-1", 22.7095508, 85.942268, "132kvtower", { connectedSubstation: "Sub-station-1", installDate: "2009-03-19" }],
+            ["LILO-1", 22.7020863, 85.934202, "lilo", { connectedSubstation: "Sub-station-1", installDate: "2010-03-19" }],
+            ["HT Metering Unit-1", 22.8267626, 86.088575, "htmeteringunit", { connectedSubstation: "Sub-station-1", installDate: "2011-03-19" }],
+            ["Meter-1", 22.7998725, 86.190352, "meter", { connectedSubstation: "Sub-station-1", installDate: "2012-03-19" }],
+            ["HDD-1", 22.8259274, 86.086814, "hdd", { connectedSubstation: "Sub-station-1", installDate: "2013-03-19" }]
+        ];
 
-            new Chart(document.getElementById('pieChart'), {
-                type: 'pie',
-                data: {
-                    labels: ['DTs', 'RMUs', 'Poles'],
-                    datasets: [{ data: [dtCount, rmuCount, poleCount], backgroundColor: ['#ff6384', '#36a2eb', '#4bc0c0'] }]
-                },
-                options: { responsive: true, maintainAspectRatio: false }
-            });
+        var markers = [];
+        var userLocation = null;
+        var userMarker = null;
+        var layerGroups = {};
 
-            new Chart(document.getElementById('barChart'), {
-                type: 'bar',
-                data: {
-                    labels: ['DTs', 'RMUs', 'Poles'],
-                    datasets: [{ label: 'Asset Count', data: [dtCount, rmuCount, poleCount], backgroundColor: ['#ff6384', '#36a2eb', '#4bc0c0'] }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            var R = 6371;
+            var dLat = (lat2 - lat1) * Math.PI / 180;
+            var dLon = (lon2 - lon1) * Math.PI / 180;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return (R * c).toFixed(2);
+        }
+
+        function getPopupContent(item) {
+            var distance = userLocation ? calculateDistance(userLocation[0], userLocation[1], item.lat, item.lon) : "N/A";
+            var attributes = item.attributes || {};
+            return `
+                <b style="font-size: 1.1rem; color: #007bff;">${item.name}</b><br>
+                Type: ${item.category}<br>
+                ${attributes.connectedSubstation ? `Connected to: ${attributes.connectedSubstation}<br>` : ''}
+                ${attributes.installDate ? `Installed: ${attributes.installDate}<br>` : ''}
+                📍 <a href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank" style="color: #dc3545; text-decoration: none;">View on Google Maps</a><br>
+                📏 <span style="color: #6c757d;">Distance: ${distance} km</span>
+            `;
+        }
+
+        function updatePopups() {
+            markers.forEach(function (item) {
+                item.marker.bindPopup(getPopupContent(item));
+                if (item.marker.isPopupOpen()) {
+                    item.marker.setPopupContent(getPopupContent(item));
+                }
             });
         }
 
-        updateCharts();
+        Object.keys(icons).forEach(function(category) {
+            if (category !== 'location') {
+                layerGroups[category] = L.layerGroup();
+            }
+        });
 
-        // Export Functions
-        function exportToExcel() {
-            const wb = XLSX.utils.book_new();
-            const ws1 = XLSX.utils.json_to_sheet(assets.distributionTransformers);
-            const ws2 = XLSX.utils.json_to_sheet(assets.rmus);
-            const ws3 = XLSX.utils.json_to_sheet(assets.poles);
-            XLSX.utils.book_append_sheet(wb, ws1, "DTs");
-            XLSX.utils.book_append_sheet(wb, ws2, "RMUs");
-            XLSX.utils.book_append_sheet(wb, ws3, "Poles");
-            XLSX.writeFile(wb, "AssetMapData.xlsx");
+        locations.forEach(function (loc) {
+            var marker = L.marker([loc[1], loc[2]], { icon: icons[loc[3]] });
+            marker.bindPopup(getPopupContent({ name: loc[0], lat: loc[1], lon: loc[2], category: loc[3], attributes: loc[4] }));
+            markers.push({ marker: marker, name: loc[0], lat: loc[1], lon: loc[2], category: loc[3], attributes: loc[4] });
+            layerGroups[loc[3]].addLayer(marker);
+        });
+
+        Object.values(layerGroups).forEach(function(layer) {
+            layer.addTo(map);
+        });
+
+        updatePopups();
+
+        function filterMarkers() {
+            var selectedCategory = document.getElementById('filterSelect').value;
+            Object.keys(layerGroups).forEach(function(category) {
+                if (selectedCategory === 'all' || category === selectedCategory) {
+                    if (!map.hasLayer(layerGroups[category])) {
+                        layerGroups[category].addTo(map);
+                    }
+                } else {
+                    if (map.hasLayer(layerGroups[category])) {
+                        map.removeLayer(layerGroups[category]);
+                    }
+                }
+            });
+            updatePopups();
         }
 
-        function exportToShp() {
-            const features = [
-                ...assets.distributionTransformers.map(dt => ({
-                    type: 'Feature',
-                    geometry: { type: 'Point', coordinates: [dt.lng, dt.lat] },
-                    properties: { type: 'DT', rating: dt.rating, connectedRMU: dt.connectedRMU, substation: dt.substation, serial: dt.serial }
-                })),
-                ...assets.rmus.map(rmu => ({
-                    type: 'Feature',
-                    geometry: { type: 'Point', coordinates: [rmu.lng, rmu.lat] },
-                    properties: { type: 'RMU', name: rmu.name, serial: rmu.serial, substation: rmu.substation }
-                })),
-                ...assets.poles.map(pole => ({
-                    type: 'Feature',
-                    geometry: { type: 'Point', coordinates: [pole.lng, pole.lat] },
-                    properties: { type: 'Pole', number: pole.number, connectedDT: pole.connectedDT, connectedFP: pole.connectedFP }
-                }))
-            ];
-
-            shpwrite.download({
-                type: 'FeatureCollection',
-                features: features
-            }, { folder: 'AssetMapData', types: { point: 'Assets' } });
+        function startAddingAsset() {
+            addingAsset = true;
+            document.getElementById('searchContainer').innerHTML = `
+                <select id="assetType">
+                    ${Object.keys(icons).filter(k => k !== 'location').map(k => `<option value="${k}">${k.toUpperCase()}</option>`).join('')}
+                </select>
+                <input type="text" id="assetName" placeholder="Enter asset name">
+                <select id="connectedSubstation">
+                    <option value="">Select Substation (optional)</option>
+                    ${markers.filter(m => m.category === 'substation').map(m => `<option value="${m.name}">${m.name}</option>`).join('')}
+                </select>
+                <button onclick="cancelAddingAsset()">Cancel</button>
+            `;
+            map.on('click', addAsset);
+            alert('Click on the map to place the new asset');
         }
 
-        function exportToKml() {
-            let kml = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-<Document>
-    <name>Asset Map Data</name>`;
-            assets.distributionTransformers.forEach(dt => {
-                kml += `
-    <Placemark>
-        <name>DT_${dt.serial}</name>
-        <description><![CDATA[Rating: ${dt.rating}<br>Connected RMU: ${dt.connectedRMU}<br>Substation: ${dt.substation}<br>Serial: ${dt.serial}]]></description>
-        <Point>
-            <coordinates>${dt.lng},${dt.lat}</coordinates>
-        </Point>
-    </Placemark>`;
-            });
-            assets.rmus.forEach(rmu => {
-                kml += `
-    <Placemark>
-        <name>RMU_${rmu.serial}</name>
-        <description><![CDATA[Name: ${rmu.name}<br>Serial: ${rmu.serial}<br>Substation: ${rmu.substation}]]></description>
-        <Point>
-            <coordinates>${rmu.lng},${rmu.lat}</coordinates>
-        </Point>
-    </Placemark>`;
-            });
-            assets.poles.forEach(pole => {
-                kml += `
-    <Placemark>
-        <name>Pole_${pole.number}</name>
-        <description><![CDATA[Number: ${pole.number}<br>Connected DT: ${pole.connectedDT}<br>Connected FP: ${pole.connectedFP}]]></description>
-        <Point>
-            <coordinates>${pole.lng},${pole.lat}</coordinates>
-        </Point>
-    </Placemark>`;
-            });
-            kml += `
-</Document>
-</kml>`;
-
-            const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'AssetMapData.kml';
-            a.click();
-            URL.revokeObjectURL(url);
+        function cancelAddingAsset() {
+            addingAsset = false;
+            map.off('click', addAsset);
+            document.getElementById('searchContainer').innerHTML = `
+                <input type="text" id="searchBox" placeholder="Search for infrastructure...">
+                <select id="filterSelect" onchange="filterMarkers()">
+                    <option value="all">All Categories</option>
+                    <option value="rmu">RMU</option>
+                    <option value="dt">DT</option>
+                    <option value="fp">FP</option>
+                    <option value="poles">Poles</option>
+                    <option value="abs">ABS</option>
+                    <option value="lbs">LBS</option>
+                    <option value="earthpit">Earthpit</option>
+                    <option value="cabledepth">Cable Depth</option>
+                    <option value="sourcesubstation">Source Sub-station</option>
+                    <option value="substation">Sub-station</option>
+                    <option value="cablejoint">Cable Joint</option>
+                    <option value="routemarker">Route Marker</option>
+                    <option value="cpss">CPSS</option>
+                    <option value="db">DB</option>
+                    <option value="132kvtower">132kV Tower</option>
+                    <option value="lilo">LILO</option>
+                    <option value="htmeteringunit">HT Metering Unit</option>
+                    <option value="meter">Meter</option>
+                    <option value="hdd">HDD</option>
+                </select>
+                <div id="searchResults"></div>
+            `;
         }
-    </script>
-</body>
-</html>
+
+        function addAsset(e) {
+            var assetType = document.getElementById('assetType').value;
+            var assetName = document.getElementById('assetName').value || `${assetType.toUpperCase()}-${markers.length + 1}`;
+            var connectedSubstation = document.getElementById('connectedSubstation').value;
+            var lat = e.latlng.lat;
+            var lon = e.latlng.lng;
+            var currentDate = new Date().toISOString().split('T')[0];
+            
+            var attributes = {
+                installDate: currentDate
+            };
+            if (connectedSubstation) {
+                attributes.connectedSubstation = connectedSubstation;
+            }
+
+            var marker = L.marker([lat, lon], { icon: icons[assetType] });
+            marker.bindPopup(getPopupContent({ name: assetName, lat: lat, lon: lon, category: assetType, attributes: attributes }));
+            markers.push({ marker: marker, name: assetName, lat: lat, lon: lon, category: assetType, attributes: attributes });
+            layerGroups[assetType].addLayer(marker);
+            marker.addTo(map);
+            
+            cancelAddingAsset();
+            updatePopups();
+        }
+
+        function generateReport() {
+            var report = "Electrical Infrastructure Report\n\n";
+            var currentDate = new Date();
+            
+            // Total RMUs per substation
+            var substations = {};
+            markers.filter(m => m.category === 'rmu').forEach(function(rmu) {
+                var sub = rmu.attributes.connectedSubstation || 'Unconnected';
+                substations[sub] = (substations[sub] || 0) + 1;
+            });
+            report += "RMUs per Substation:\n";
+            for (var sub in substations) {
+                report += `${sub}: ${substations[sub]}\n`;
+            }
+
+            // RMUs older than 10 years
+            var tenYearsAgo = new Date(currentDate.setFullYear(currentDate.getFullYear() - 10));
+            var oldRMUs = markers.filter(m => m.category === 'rmu' && 
+                new Date(m.attributes.installDate) <= tenYearsAgo);
+            report += `\nRMUs older than 10 years: ${oldRMUs.length}\n`;
+
+            // DTs older than 5 years
+            var fiveYearsAgo = new Date(currentDate.setFullYear(currentDate.getFullYear() - 5));
+            var oldDTs = markers.filter(m => m.category === 'dt' && 
+                new Date(m.attributes.installDate) <= fiveYearsAgo);
+            report += `DTs older than 5 years: ${oldDTs.length
