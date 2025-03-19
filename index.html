@@ -92,45 +92,74 @@
         const shareOptions = document.getElementById('shareOptions');
         const status = document.getElementById('status');
 
-        recordBtn.addEventListener('click', () => {
-            // Placeholder for starting recording logic
-            recordBtn.style.display = 'none';
-            stopBtn.style.display = 'inline-block';
-            status.textContent = 'Recording in progress...';
-            // Here you would integrate WebRTC or similar for actual recording
+        let mediaRecorder;
+        let audioChunks = [];
+
+        // Request microphone permission and start recording
+        recordBtn.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    audioChunks = []; // Reset for next recording
+                    // For now, we'll simulate MOM as a simple text
+                    window.generatedMOM = "Sample Minutes of Meeting: Meeting recorded on " + new Date().toLocaleString();
+                };
+
+                mediaRecorder.start();
+                recordBtn.style.display = 'none';
+                stopBtn.style.display = 'inline-block';
+                status.textContent = 'Recording in progress...';
+            } catch (err) {
+                status.textContent = 'Error: Microphone access denied or unavailable.';
+                console.error(err);
+            }
         });
 
+        // Stop recording
         stopBtn.addEventListener('click', () => {
-            // Placeholder for stopping recording logic
+            mediaRecorder.stop();
+            mediaRecorder.stream.getTracks().forEach(track => track.stop()); // Stop mic access
             stopBtn.style.display = 'none';
             generateBtn.style.display = 'inline-block';
             status.textContent = 'Recording stopped. Generate MOM?';
         });
 
+        // Generate MOM (placeholder)
         generateBtn.addEventListener('click', () => {
-            // Placeholder for MOM generation logic
             generateBtn.style.display = 'none';
             shareOptions.style.display = 'block';
             status.textContent = 'MOM generated successfully!';
-            // Here you would integrate an AI/NLP service to generate MOM
+            // In a real app, you'd process the audioBlob here to generate MOM
         });
 
+        // Share functionality
         function share(method) {
-            // Placeholder for sharing logic
-            let message = '';
+            const momText = window.generatedMOM || "No MOM generated yet.";
             switch(method) {
                 case 'outlook':
-                    message = 'Sharing via Outlook...';
+                    // Outlook integration requires a backend or specific API (e.g., Microsoft Graph)
+                    status.textContent = 'Outlook sharing requires backend integration.';
+                    alert('Outlook sharing not fully implemented in this demo. Use Email or WhatsApp.');
                     break;
                 case 'email':
-                    message = 'Sharing via Email...';
+                    const subject = encodeURIComponent('Minutes of Meeting');
+                    const body = encodeURIComponent(momText);
+                    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                    status.textContent = 'Opening email client...';
                     break;
                 case 'whatsapp':
-                    message = 'Sharing via WhatsApp...';
+                    const whatsappText = encodeURIComponent(momText);
+                    window.open(`https://wa.me/?text=${whatsappText}`, '_blank');
+                    status.textContent = 'Opening WhatsApp...';
                     break;
             }
-            status.textContent = message;
-            // Here you would integrate actual sharing functionality
         }
     </script>
 </body>
