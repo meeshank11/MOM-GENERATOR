@@ -19,7 +19,7 @@
             padding: 40px;
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            width: 400px;
+            width: 500px;
             text-align: center;
         }
         h1 {
@@ -67,6 +67,7 @@
             margin-top: 20px;
             font-size: 14px;
             color: #666;
+            word-wrap: break-word;
         }
     </style>
 </head>
@@ -92,61 +93,79 @@
         const shareOptions = document.getElementById('shareOptions');
         const status = document.getElementById('status');
 
-        let mediaRecorder;
-        let audioChunks = [];
+        let recognition;
+        let transcript = '';
 
-        // Request microphone permission and start recording
-        recordBtn.addEventListener('click', async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
+        // Check if Web Speech API is available
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = true; // Keep recording until stopped
+            recognition.interimResults = true; // Show real-time results
+            recognition.lang = 'en-US'; // Set language
 
-                mediaRecorder.ondataavailable = (event) => {
-                    audioChunks.push(event.data);
-                };
+            recognition.onresult = (event) => {
+                transcript = Array.from(event.results)
+                    .map(result => result[0].transcript)
+                    .join(' ');
+                status.textContent = `Recording... (Live transcript: ${transcript})`;
+            };
 
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    audioChunks = []; // Reset for next recording
-                    // For now, we'll simulate MOM as a simple text
-                    window.generatedMOM = "Sample Minutes of Meeting: Meeting recorded on " + new Date().toLocaleString();
-                };
+            recognition.onerror = (event) => {
+                status.textContent = `Error during recording: ${event.error}`;
+            };
+        } else {
+            status.textContent = 'Sorry, your browser does not support speech recognition.';
+        }
 
-                mediaRecorder.start();
-                recordBtn.style.display = 'none';
-                stopBtn.style.display = 'inline-block';
-                status.textContent = 'Recording in progress...';
-            } catch (err) {
-                status.textContent = 'Error: Microphone access denied or unavailable.';
-                console.error(err);
-            }
+        // Start recording and transcription
+        recordBtn.addEventListener('click', () => {
+            if (!recognition) return;
+            transcript = ''; // Reset transcript
+            recognition.start();
+            recordBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            status.textContent = 'Recording in progress...';
         });
 
-        // Stop recording
+        // Stop recording and transcription
         stopBtn.addEventListener('click', () => {
-            mediaRecorder.stop();
-            mediaRecorder.stream.getTracks().forEach(track => track.stop()); // Stop mic access
+            if (!recognition) return;
+            recognition.stop();
             stopBtn.style.display = 'none';
             generateBtn.style.display = 'inline-block';
             status.textContent = 'Recording stopped. Generate MOM?';
         });
 
-        // Generate MOM (placeholder)
+        // Generate MOM
         generateBtn.addEventListener('click', () => {
+            if (!transcript) {
+                status.textContent = 'No audio recorded to generate MOM.';
+                return;
+            }
+            // Simple summarization (for demo purposes)
+            const mom = generateMOM(transcript);
+            window.generatedMOM = mom;
             generateBtn.style.display = 'none';
             shareOptions.style.display = 'block';
-            status.textContent = 'MOM generated successfully!';
-            // In a real app, you'd process the audioBlob here to generate MOM
+            status.textContent = `MOM: ${mom}`;
         });
+
+        // Simple MOM generation function (placeholder for AI summarization)
+        function generateMOM(text) {
+            const timestamp = new Date().toLocaleString();
+            // For demo, just trim and add a header. Real AI would summarize.
+            const summary = text.length > 100 ? text.substring(0, 100) + '...' : text;
+            return `Minutes of Meeting (${timestamp}):\n${summary}`;
+        }
 
         // Share functionality
         function share(method) {
             const momText = window.generatedMOM || "No MOM generated yet.";
             switch(method) {
                 case 'outlook':
-                    // Outlook integration requires a backend or specific API (e.g., Microsoft Graph)
                     status.textContent = 'Outlook sharing requires backend integration.';
-                    alert('Outlook sharing not fully implemented in this demo. Use Email or WhatsApp.');
+                    alert('Outlook sharing not fully implemented. Use Email or WhatsApp.');
                     break;
                 case 'email':
                     const subject = encodeURIComponent('Minutes of Meeting');
